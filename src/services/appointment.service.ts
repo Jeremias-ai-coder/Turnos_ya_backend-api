@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { AppointmentStatus } from '@prisma/client';
 import { IAppointmentRepository } from '../interfaces/appointment.interface';
 import { IServiceRepository } from '../interfaces/service.interface';
+import { NotificationService, formatDateHelper, formatTimeHelper } from './notification.service';
 import { WebhookService } from '../infrastructure/webhook.service';
 import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
@@ -19,8 +20,10 @@ export interface GetAppointmentsParams {
 export class AppointmentService {
   constructor(
     private appointmentRepo: IAppointmentRepository,
-    private serviceRepo?: IServiceRepository
+    private serviceRepo?: IServiceRepository,
+    private notificationService?: NotificationService
   ) {}
+
 
   async holdAppointment(userId: number, data: { businessId: number; serviceId: number; date: string; time: string }) {
     // 1. Validar que la fecha y hora sean futuras
@@ -76,6 +79,12 @@ export class AppointmentService {
 
       const confirmed = await this.appointmentRepo.confirmAppointment(existingHold.id);
       WebhookService.dispatch('appointment.created', data.businessId, confirmed);
+
+      // Enviar notificaciones a cliente y owner
+      this.triggerAppointmentNotifications(confirmed.id).catch(err =>
+        console.error('Error enviando notificaciones de reserva:', err)
+      );
+
       return confirmed;
     }
 
@@ -109,6 +118,12 @@ export class AppointmentService {
     });
 
     WebhookService.dispatch('appointment.created', data.businessId, appointment);
+
+    // Enviar notificaciones a cliente y owner
+    this.triggerAppointmentNotifications(appointment.id).catch(err =>
+      console.error('Error enviando notificaciones de reserva:', err)
+    );
+
     return appointment;
   }
 
@@ -163,7 +178,81 @@ export class AppointmentService {
     });
 
     WebhookService.dispatch('appointment.cancelled', appointment.businessId, cancelled);
+
+    // Enviar notificaciones de cancelación
+    this.triggerCancellationNotifications(appointment, userId, data.reason).catch(err =>
+      console.error('Error enviando notificaciones de cancelación:', err)
+    );
+
     return cancelled;
+  }
+
+  private async triggerAppointmentNotifications(appointmentId: number) {
+    if (!this.notificationService) return;
+    try {
+      const full = await this.appointmentRepo.findById(appointmentId);
+      if (!full) return;
+
+      const timeFormatted = formatTimeHelper(full.time);
+      const dateFormatted = formatDateHelper(full.date);
+      const serviceName = full.service?.name || 'Servicio';
+      const businessName = full.business?.name || 'Negocio';
+      const clientName = full.user?.name || 'Cliente';
+
+      // 1. Notificación al Cliente: confirmación de reserva exitosa
+      await this.notificationService.createNotification({
+        userId: full.userId,
+        title: '¡Turno guardado con éxito!',
+        message: `Tu turno para "${serviceName}" en ${businessName} el ${dateFormatted} a las ${timeFormatted} hs se guardó exitosamente.`,
+        type: 'APPOINTMENT_CONFIRMED'
+      });
+
+      // 2. Notificación al Owner: aviso de nuevo turno agendado
+      if (full.business?.ownerId) {
+        await this.notificationService.createNotification({
+          userId: full.business.ownerId,
+          title: 'Nuevo turno reservado',
+          message: `${clientName} ha reservado un turno para "${serviceName}" el ${dateFormatted} a las ${timeFormatted} hs.`,
+          type: 'NEW_BOOKING'
+        });
+      }
+    } catch (err) {
+      console.error('triggerAppointmentNotifications error:', err);
+    }
+  }
+
+  private async triggerCancellationNotifications(appointment: any, cancelledByUserId: number, reason?: string) {
+    if (!this.notificationService) return;
+    try {
+      const timeFormatted = formatTimeHelper(appointment.time);
+      const dateFormatted = formatDateHelper(appointment.date);
+      const serviceName = appointment.service?.name || 'Servicio';
+      const businessName = appointment.business?.name || 'Negocio';
+      const clientName = appointment.user?.name || 'Cliente';
+      const reasonText = reason ? ` Motivo: ${reason}` : '';
+
+      // 1. Notificación al Owner: aviso de cancelación
+      if (appointment.business?.ownerId) {
+        await this.notificationService.createNotification({
+          userId: appointment.business.ownerId,
+          title: 'Turno cancelado',
+          message: `El turno de ${clientName} para "${serviceName}" el ${dateFormatted} a las ${timeFormatted} hs fue cancelado.${reasonText}`,
+          type: 'APPOINTMENT_CANCELLED'
+        });
+      }
+
+      // 2. Si el turno fue cancelado por el Owner o Administrador, notificar al Cliente
+      if (cancelledByUserId !== appointment.userId) {
+        await this.notificationService.createNotification({
+          userId: appointment.userId,
+          title: 'Tu turno ha sido cancelado',
+          message: `Tu turno para "${serviceName}" en ${businessName} el ${dateFormatted} a las ${timeFormatted} hs fue cancelado.${reasonText}`,
+          type: 'APPOINTMENT_CANCELLED'
+        });
+      }
+    } catch (err) {
+      console.error('triggerCancellationNotifications error:', err);
+    }
   }
 
   async updateStatus(

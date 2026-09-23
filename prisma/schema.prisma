@@ -19,6 +19,7 @@ model User {
   deletedAt             DateTime?     @map("deleted_at") @db.Timestamp(0)
   businesses            Business[]
   appointments          Appointment[]
+  notifications         Notification[]
 
   @@map("users")
 }
@@ -101,6 +102,7 @@ model Appointment {
   cancelledByUserId String?           @map("cancelled_by_user_id") @db.VarChar(100)
   holdToken         String?           @map("hold_token") @db.VarChar(100)
   holdExpiresAt     DateTime?         @map("hold_expires_at") @db.Timestamp(0)
+  reminder1hSent    Boolean           @default(false) @map("reminder_1h_sent")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
@@ -122,6 +124,20 @@ model Review {
   @@map("reviews")
 }
 
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String   @db.VarChar(150)
+  message   String   @db.Text
+  type      String   @default("INFO") @db.VarChar(50)
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamp(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
 enum AppointmentStatus {
   PENDING
   CONFIRMED
@@ -130,3 +146,4 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
 }
+

@@ -7,6 +7,8 @@ import businessRoutes from './routes/business.routes';
 import appointmentRoutes from './routes/appointment.routes';
 import adminRoutes from './routes/admin.routes';
 import healthRoutes from './routes/health.routes';
+import notificationRoutes from './routes/notification.routes';
+import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
 
 const app = express();
@@ -23,6 +25,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', authRoutes);
 app.use('/api/v1/businesses', businessRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 
 // Global error handler (RFC 7807)
@@ -31,4 +34,7 @@ app.use(errorHandler);
 const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on 0.0.0.0:${PORT}`);
+  // Iniciar tarea periódica de recordatorios de turnos (cada 60 segundos)
+  reminderJob.start(60000);
 });
+

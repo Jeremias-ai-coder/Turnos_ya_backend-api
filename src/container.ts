@@ -7,6 +7,7 @@ import { PrismaAppointmentRepository } from './repositories/prisma-appointment.r
 import { PrismaUserRepository } from './repositories/prisma-user.repository';
 import { PrismaScheduleRepository } from './repositories/prisma-schedule.repository';
 import { PrismaReviewRepository } from './repositories/prisma-review.repository';
+import { PrismaNotificationRepository } from './repositories/prisma-notification.repository';
 
 // Servicios
 import { ServiceService } from './services/service.service';
@@ -16,6 +17,8 @@ import { AuthService } from './services/auth.service';
 import { ScheduleService } from './services/schedule.service';
 import { AdminService } from './services/admin.service';
 import { ReviewService } from './services/review.service';
+import { NotificationService } from './services/notification.service';
+import { ReminderJob } from './infrastructure/reminder.job';
 
 // Controladores
 import { ServiceController } from './controllers/service.controller';
@@ -25,6 +28,7 @@ import { AuthController } from './controllers/auth.controller';
 import { ScheduleController } from './controllers/schedule.controller';
 import { AdminController } from './controllers/admin.controller';
 import { ReviewController } from './controllers/review.controller';
+import { NotificationController } from './controllers/notification.controller';
 
 // 1. Instanciación de Repositorios (Inyección de Prisma Client)
 export const serviceRepository = new PrismaServiceRepository(prisma);
@@ -33,15 +37,20 @@ export const appointmentRepository = new PrismaAppointmentRepository(prisma);
 export const userRepository = new PrismaUserRepository(prisma);
 export const scheduleRepository = new PrismaScheduleRepository(prisma);
 export const reviewRepository = new PrismaReviewRepository(prisma);
+export const notificationRepository = new PrismaNotificationRepository(prisma);
 
 // 2. Instanciación de Servicios (Inyección de Repositorios)
+export const notificationService = new NotificationService(notificationRepository, prisma);
 export const serviceService = new ServiceService(serviceRepository, businessRepository);
 export const businessService = new BusinessService(businessRepository, userRepository);
-export const appointmentService = new AppointmentService(appointmentRepository, serviceRepository);
+export const appointmentService = new AppointmentService(appointmentRepository, serviceRepository, notificationService);
 export const authService = new AuthService(userRepository);
 export const scheduleService = new ScheduleService(scheduleRepository, businessRepository);
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository);
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository);
+
+// Tareas en segundo plano (Scheduler)
+export const reminderJob = new ReminderJob(notificationService);
 
 // 3. Instanciación de Controladores (Inyección de Servicios)
 export const serviceController = new ServiceController(serviceService);
@@ -51,3 +60,5 @@ export const authController = new AuthController(authService);
 export const scheduleController = new ScheduleController(scheduleService);
 export const adminController = new AdminController(adminService);
 export const reviewController = new ReviewController(reviewService);
+export const notificationController = new NotificationController(notificationService);
+
