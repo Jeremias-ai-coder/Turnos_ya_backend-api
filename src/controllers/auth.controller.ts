@@ -1,40 +1,117 @@
 import { Request, Response } from 'express';
-import { AuthService } from '../services/auth.service';
-import { registerSchema, loginSchema } from '../validators/auth.validator';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+import { PrismaClient } from '@prisma/client';
 import { AppError } from '../middlewares/errorHandler';
+import { registerSchema, loginSchema } from '../validators/auth.validator';
+
+const prisma = new PrismaClient();
+const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService?: any) {}
 
-  register = async (req: Request, res: Response) => {
+  static async register(req: Request, res: Response) {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
       throw new AppError('Datos inválidos', 400, details);
     }
 
-    const result = await this.authService.register(parsed.data);
-    res.status(201).json(result);
-  };
+    const { name, email, password, role } = parsed.data;
 
-  login = async (req: Request, res: Response) => {
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new AppError('El email ya está en uso', 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        role,
+      },
+    });
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        emailNotifications: user.emailNotifications,
+        whatsappNotifications: user.whatsappNotifications,
+        createdAt: null,
+        deletedAt: user.deletedAt
+      }
+    });
+  }
+
+  static async login(req: Request, res: Response) {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
       throw new AppError('Datos inválidos', 400, details);
     }
 
-    const result = await this.authService.login(parsed.data);
-    res.json(result);
-  };
+    const { email, password } = parsed.data;
 
-  getMe = async (req: Request, res: Response) => {
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new AppError('Credenciales incorrectas', 401);
+    }
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) {
+      throw new AppError('Credenciales incorrectas', 401);
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        emailNotifications: user.emailNotifications,
+        whatsappNotifications: user.whatsappNotifications,
+        createdAt: null,
+        deletedAt: user.deletedAt
+      }
+    });
+  }
+
+  static async getMe(req: Request, res: Response) {
     const userId = (req as any).user.id;
-    const user = await this.authService.getMe(userId);
-    res.json(user);
-  };
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
 
-  updateProfile = async (req: Request, res: Response) => {
+    res.json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      phone: user.phone,
+      emailNotifications: user.emailNotifications,
+      whatsappNotifications: user.whatsappNotifications,
+      createdAt: null,
+      deletedAt: user.deletedAt
+    });
+  }
+
+  static async updateProfile(req: Request, res: Response) {
     const userId = (req as any).user.id;
     const { name, phone, emailNotifications, whatsappNotifications } = req.body;
 
@@ -44,7 +121,43 @@ export class AuthController {
     if (emailNotifications !== undefined) data.emailNotifications = emailNotifications;
     if (whatsappNotifications !== undefined) data.whatsappNotifications = whatsappNotifications;
 
-    const user = await this.authService.updateProfile(userId, data);
-    res.json(user);
-  };
+    const user = await prisma.user.update({ where: { id: userId }, data });
+
+    res.json({
+      id: user.id, name: user.name, email: user.email, role: user.role,
+      phone: user.phone, emailNotifications: user.emailNotifications,
+      whatsappNotifications: user.whatsappNotifications,
+    });
+  }
+
+  static async changePassword(req: Request, res: Response) {
+    const userId = (req as any).user.id;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      throw new AppError('La nueva contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      throw new AppError('La contraseña actual es incorrecta', 401);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword }
+    });
+
+    res.json({ message: 'Contraseña actualizada correctamente' });
+  }
 }
