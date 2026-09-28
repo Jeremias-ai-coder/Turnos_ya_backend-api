@@ -2,7 +2,6 @@ import { PrismaClient } from '@prisma/client';
 import { INotificationRepository, CreateNotificationDTO } from '../interfaces/notification.interface';
 import { getHoursUntilAppointment } from '../utils/date';
 import { AppError } from '../middlewares/errorHandler';
-import { sendEmail } from './email.service';
 
 export function formatTimeHelper(timeInput: any): string {
   if (!timeInput) return '';
@@ -85,7 +84,7 @@ export class NotificationService {
         include: {
           service: true,
           business: true,
-          user: { select: { id: true, name: true, email: true, emailNotifications: true } }
+          user: { select: { id: true, name: true, email: true } }
         }
       });
 
@@ -113,23 +112,6 @@ export class NotificationService {
             message: `Recuerda que tienes un turno para "${serviceName}" en ${businessName} hoy a las ${timeFormatted} hs. ¡Te esperamos!`,
             type: 'APPOINTMENT_REMINDER'
           });
-
-          if (app.user.email && app.user.emailNotifications !== false) {
-            const dateFormatted = formatDateHelper(app.date);
-
-            await sendEmail({
-              to: app.user.email,
-              subject: 'Recordatorio de turno',
-              html: `
-                <h2>Recordatorio de turno</h2>
-                <p>Hola ${app.user.name || 'usuario'},</p>
-                <p>Te recordamos que tienes un turno para <strong>${serviceName}</strong> en <strong>${businessName}</strong>.</p>
-                <p><strong>Fecha:</strong> ${dateFormatted}</p>
-                <p><strong>Hora:</strong> ${timeFormatted} hs</p>
-                <p>¡Te esperamos!</p>
-              `
-            });
-          }
 
           await this.prisma.appointment.update({
             where: { id: app.id },

@@ -9,6 +9,8 @@ const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
 export class AuthController {
+  constructor(private authService?: any) {}
+
   static async register(req: Request, res: Response) {
     const parsed = registerSchema.safeParse(req.body);
     if (!parsed.success) {

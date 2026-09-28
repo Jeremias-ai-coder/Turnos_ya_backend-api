@@ -4,11 +4,7 @@ export const registerSchema = z.object({
   name: z.string().min(2, 'El nombre es requerido y debe ser mayor a 2 caracteres'),
   email: z.string().email('Debe ser un correo electrónico válido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
-  confirmPassword: z.string().min(1, 'La confirmación de contraseña es requerida'),
-  role: z.enum(['client', 'owner']).default('client')
-}).refine(data => data.password === data.confirmPassword, {
-  path: ['confirmPassword'],
-  message: 'Las contraseñas deben coincidir'
+  role: z.enum(['client', 'owner', 'administrator']).default('client')
 });
 
 export const loginSchema = z.object({
