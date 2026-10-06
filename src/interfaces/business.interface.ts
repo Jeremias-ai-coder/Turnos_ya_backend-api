@@ -6,6 +6,7 @@ export interface CreateBusinessDTO {
   address?: string;
   phone?: string;
   category?: string;
+  categoryId?: number;
   logoUrl?: string;
   latitude?: number;
   longitude?: number;
@@ -19,6 +20,7 @@ export interface UpdateBusinessDTO {
   address?: string;
   phone?: string;
   category?: string;
+  categoryId?: number;
   logoUrl?: string;
   latitude?: number;
   longitude?: number;

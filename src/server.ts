@@ -9,6 +9,7 @@ import appointmentRoutes from './routes/appointment.routes';
 import adminRoutes from './routes/admin.routes';
 import healthRoutes from './routes/health.routes';
 import notificationRoutes from './routes/notification.routes';
+import categoryRoutes from './routes/category.routes';
 import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
 
@@ -25,6 +26,8 @@ app.use('/api/v1/health', healthRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', authRoutes);
 app.use('/api/v1/businesses', businessRoutes);
+app.use('/api/v1/categories', categoryRoutes);
+app.use('/api/categories', categoryRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);

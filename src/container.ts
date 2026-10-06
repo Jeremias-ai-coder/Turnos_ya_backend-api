@@ -18,6 +18,7 @@ import { ScheduleService } from './services/schedule.service';
 import { AdminService } from './services/admin.service';
 import { ReviewService } from './services/review.service';
 import { NotificationService } from './services/notification.service';
+import { CategoryService } from './services/category.service';
 import { ReminderJob } from './infrastructure/reminder.job';
 
 // Controladores
@@ -29,6 +30,7 @@ import { ScheduleController } from './controllers/schedule.controller';
 import { AdminController } from './controllers/admin.controller';
 import { ReviewController } from './controllers/review.controller';
 import { NotificationController } from './controllers/notification.controller';
+import { CategoryController } from './controllers/category.controller';
 
 // 1. Instanciación de Repositorios (Inyección de Prisma Client)
 export const serviceRepository = new PrismaServiceRepository(prisma);
@@ -48,6 +50,7 @@ export const authService = new AuthService(userRepository);
 export const scheduleService = new ScheduleService(scheduleRepository, businessRepository);
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository);
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository);
+export const categoryService = new CategoryService(prisma);
 
 // Tareas en segundo plano (Scheduler)
 export const reminderJob = new ReminderJob(notificationService);
@@ -61,4 +64,5 @@ export const scheduleController = new ScheduleController(scheduleService);
 export const adminController = new AdminController(adminService);
 export const reviewController = new ReviewController(reviewService);
 export const notificationController = new NotificationController(notificationService);
+export const categoryController = new CategoryController(categoryService);
 

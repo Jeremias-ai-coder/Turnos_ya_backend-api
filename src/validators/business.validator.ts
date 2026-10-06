@@ -6,6 +6,7 @@ export const createBusinessSchema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   category: z.string().optional(),
+  categoryId: z.number().int().positive().optional(),
   logoUrl: z.string().url('Debe ser una URL válida').optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
