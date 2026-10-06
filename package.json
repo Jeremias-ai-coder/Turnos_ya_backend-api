@@ -12,7 +12,10 @@
     "db:logs": "docker compose logs -f",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "tsx seed.ts"
+    "db:seed": "tsx prisma/seeds/index.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seeds/index.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
