@@ -4,14 +4,46 @@ import { IBusinessRepository, CreateBusinessDTO, UpdateBusinessDTO } from '../in
 export class PrismaBusinessRepository implements IBusinessRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(skip: number, take: number): Promise<[any[], number]> {
+  async findAll(skip: number, take: number, search?: string): Promise<[any[], number]> {
+    const cleanSearch = search?.trim();
+    const whereClause = cleanSearch ? {
+      OR: [
+        { name: { contains: cleanSearch } },
+        { description: { contains: cleanSearch } },
+        { address: { contains: cleanSearch } },
+        { category: { contains: cleanSearch } },
+        { categoryRel: { name: { contains: cleanSearch } } },
+        {
+          services: {
+            some: {
+              OR: [
+                { name: { contains: cleanSearch } },
+                { description: { contains: cleanSearch } }
+              ]
+            }
+          }
+        }
+      ]
+    } : undefined;
+
     const [businesses, total] = await Promise.all([
       this.prisma.business.findMany({
         skip,
         take,
+        where: whereClause,
         include: {
           owner: { select: { id: true, name: true, email: true } },
           categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
+          services: {
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              price: true,
+              durationMinutes: true,
+              status: true
+            }
+          },
           appointments: {
             where: { review: { isNot: null } },
             select: {
@@ -22,7 +54,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
           }
         }
       }),
-      this.prisma.business.count()
+      this.prisma.business.count({ where: whereClause })
     ]);
 
     const formatted = businesses.map(b => {
@@ -34,6 +66,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
         category: b.categoryRel?.name || b.category || null,
         categoryRel: b.categoryRel || null,
         categoryId: b.categoryId,
+        services: b.services || [],
         rating: avg,
         reviewCount: count
       };
@@ -48,6 +81,16 @@ export class PrismaBusinessRepository implements IBusinessRepository {
       include: {
         owner: { select: { id: true, name: true } },
         categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
+        services: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            durationMinutes: true,
+            status: true
+          }
+        },
         appointments: {
           where: { review: { isNot: null } },
           select: {
@@ -70,6 +113,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
       category: b.categoryRel?.name || b.category || null,
       categoryRel: b.categoryRel || null,
       categoryId: b.categoryId,
+      services: b.services || [],
       rating: avg,
       reviewCount: count
     };

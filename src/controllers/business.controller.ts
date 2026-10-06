@@ -9,8 +9,9 @@ export class BusinessController {
   getBusinesses = async (req: Request, res: Response) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+    const search = (req.query.search || req.query.q) as string | undefined;
 
-    const result = await this.businessService.getBusinesses(page, limit);
+    const result = await this.businessService.getBusinesses(page, limit, search);
     res.json(result);
   };
 

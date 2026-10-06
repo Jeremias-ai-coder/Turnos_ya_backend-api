@@ -9,9 +9,9 @@ export class BusinessService {
     private userRepo: IUserRepository
   ) {}
 
-  async getBusinesses(page: number = 1, limit: number = 10) {
+  async getBusinesses(page: number = 1, limit: number = 10, search?: string) {
     const pagination = getPaginationOptions(page, limit, 200);
-    const [businesses, total] = await this.businessRepo.findAll(pagination.skip, pagination.limit);
+    const [businesses, total] = await this.businessRepo.findAll(pagination.skip, pagination.limit, search);
 
     return createPaginatedResponse(businesses, total, pagination.page, pagination.limit);
   }
