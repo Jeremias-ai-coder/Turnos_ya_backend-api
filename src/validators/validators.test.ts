@@ -2,11 +2,11 @@ import {
   holdAppointmentSchema,
   createAppointmentSchema,
   cancelAppointmentSchema,
-} from '../../../src/validators/appointment.validator';
+} from './appointment.validator';
 import {
   createBusinessSchema,
   updateBusinessSchema,
-} from '../../../src/validators/business.validator';
+} from './business.validator';
 
 describe('Zod Validators (Unit Tests)', () => {
   describe('appointment.validator', () => {

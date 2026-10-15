@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { AuthService } from '../../../src/services/auth.service';
-import { IUserRepository } from '../../../src/interfaces/user.interface';
-import { AppError } from '../../../src/middlewares/errorHandler';
+import { AuthService } from './auth.service';
+import { IUserRepository } from '../interfaces/user.interface';
+import { AppError } from '../middlewares/errorHandler';
 
 describe('AuthService (Unit Tests)', () => {
   let authService: AuthService;

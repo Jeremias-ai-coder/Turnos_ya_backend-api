@@ -4,11 +4,11 @@ import {
   getHoursUntilAppointment,
   isAppointmentPast,
   isPastGracePeriod,
-} from '../../../src/utils/date';
+} from './date';
 import {
   getPaginationOptions,
   createPaginatedResponse,
-} from '../../../src/utils/pagination';
+} from './pagination';
 
 describe('Utils (Unit Tests)', () => {
   describe('date utils', () => {

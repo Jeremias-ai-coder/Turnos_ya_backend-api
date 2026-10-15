@@ -1,5 +1,5 @@
-import { authGuard } from '../../../src/middlewares/authGuard';
-import { AppError } from '../../../src/middlewares/errorHandler';
+import { authGuard } from './authGuard';
+import { AppError } from './errorHandler';
 import jwt from 'jsonwebtoken';
 
 describe('authGuard Middleware (Unit Tests)', () => {

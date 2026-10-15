@@ -1,7 +1,7 @@
-import { AppointmentService } from '../../../src/services/appointment.service';
-import { IAppointmentRepository } from '../../../src/interfaces/appointment.interface';
-import { IServiceRepository } from '../../../src/interfaces/service.interface';
-import { AppError } from '../../../src/middlewares/errorHandler';
+import { AppointmentService } from './appointment.service';
+import { IAppointmentRepository } from '../interfaces/appointment.interface';
+import { IServiceRepository } from '../interfaces/service.interface';
+import { AppError } from '../middlewares/errorHandler';
 
 describe('AppointmentService (Unit Tests)', () => {
   let appointmentService: AppointmentService;

@@ -1,7 +1,7 @@
-import { BusinessService } from '../../../src/services/business.service';
-import { IBusinessRepository } from '../../../src/interfaces/business.interface';
-import { IUserRepository } from '../../../src/interfaces/user.interface';
-import { AppError } from '../../../src/middlewares/errorHandler';
+import { BusinessService } from './business.service';
+import { IBusinessRepository } from '../interfaces/business.interface';
+import { IUserRepository } from '../interfaces/user.interface';
+import { AppError } from '../middlewares/errorHandler';
 
 describe('BusinessService (Unit Tests)', () => {
   let businessService: BusinessService;
