@@ -5,6 +5,8 @@
   "main": "src/server.ts",
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "test": "jest --passWithNoTests",
+    "test:coverage": "jest --coverage",
     "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "db:up": "docker compose up -d",
@@ -33,10 +35,13 @@
     "@types/bcrypt": "^5.0.0",
     "@types/cors": "^2.8.13",
     "@types/express": "^4.17.17",
+    "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.2",
     "@types/node": "^20.0.0",
     "@types/nodemailer": "^8.0.2",
+    "jest": "^30.5.2",
     "prisma": "^5.22.0",
+    "ts-jest": "^29.4.15",
     "ts-node": "^10.9.1",
     "tsx": "^3.12.7",
     "typescript": "^5.1.6"
