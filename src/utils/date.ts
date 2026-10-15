@@ -127,3 +127,41 @@ export function isPastGracePeriod(
   );
   return new Date() > expirationTime;
 }
+
+/**
+ * Normaliza y formatea un valor de hora a string HH:mm.
+ */
+export function formatTimeHelper(timeInput: any): string {
+  if (!timeInput) return '';
+  if (typeof timeInput === 'string') {
+    const match = timeInput.match(/(\d{1,2}):(\d{2})/);
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : timeInput;
+  }
+  if (timeInput instanceof Date) {
+    const h = String(timeInput.getUTCHours()).padStart(2, '0');
+    const m = String(timeInput.getUTCMinutes()).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  return '';
+}
+
+/**
+ * Normaliza y formatea un valor de fecha a DD/MM/YYYY.
+ */
+export function formatDateHelper(dateInput: any): string {
+  if (!dateInput) return '';
+  if (typeof dateInput === 'string') {
+    const parts = dateInput.split('T')[0].split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateInput;
+  }
+  if (dateInput instanceof Date) {
+    const y = dateInput.getUTCFullYear();
+    const m = String(dateInput.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dateInput.getUTCDate()).padStart(2, '0');
+    return `${d}/${m}/${y}`;
+  }
+  return '';
+}

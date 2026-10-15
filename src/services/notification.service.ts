@@ -1,39 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import { INotificationRepository, CreateNotificationDTO } from '../interfaces/notification.interface';
-import { getHoursUntilAppointment } from '../utils/date';
+import { getHoursUntilAppointment, formatTimeHelper, formatDateHelper } from '../utils/date';
+export { formatTimeHelper, formatDateHelper } from '../utils/date';
 import { AppError } from '../middlewares/errorHandler';
-
-export function formatTimeHelper(timeInput: any): string {
-  if (!timeInput) return '';
-  if (typeof timeInput === 'string') {
-    const match = timeInput.match(/(\d{1,2}):(\d{2})/);
-    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : timeInput;
-  }
-  if (timeInput instanceof Date) {
-    const h = String(timeInput.getUTCHours()).padStart(2, '0');
-    const m = String(timeInput.getUTCMinutes()).padStart(2, '0');
-    return `${h}:${m}`;
-  }
-  return '';
-}
-
-export function formatDateHelper(dateInput: any): string {
-  if (!dateInput) return '';
-  if (typeof dateInput === 'string') {
-    const parts = dateInput.split('T')[0].split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
-    return dateInput;
-  }
-  if (dateInput instanceof Date) {
-    const y = dateInput.getUTCFullYear();
-    const m = String(dateInput.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(dateInput.getUTCDate()).padStart(2, '0');
-    return `${d}/${m}/${y}`;
-  }
-  return '';
-}
 
 export class NotificationService {
   constructor(

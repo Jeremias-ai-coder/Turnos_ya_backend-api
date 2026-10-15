@@ -2,11 +2,17 @@ import crypto from 'crypto';
 import { AppointmentStatus } from '@prisma/client';
 import { IAppointmentRepository } from '../interfaces/appointment.interface';
 import { IServiceRepository } from '../interfaces/service.interface';
-import { NotificationService, formatDateHelper, formatTimeHelper } from './notification.service';
+import { NotificationService } from './notification.service';
 import { WebhookService } from '../infrastructure/webhook.service';
 import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
-import { getHoursUntilAppointment, combineDateAndTime, parseTimeToUTC } from '../utils/date';
+import {
+  getHoursUntilAppointment,
+  combineDateAndTime,
+  parseTimeToUTC,
+  formatDateHelper,
+  formatTimeHelper,
+} from '../utils/date';
 
 export interface GetAppointmentsParams {
   userId: number;

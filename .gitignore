@@ -9,11 +9,7 @@ dist/
 .env.*
 !.env.example
 
-# Scratch & diagnostic scripts
-check-db.ts
-grant-admin.ts
-
-# Legacy code (if excluded from repo)
+# Legacy code
 _legacy_php/
 
 # Logs
