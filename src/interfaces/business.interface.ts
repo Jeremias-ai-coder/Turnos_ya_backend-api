@@ -6,6 +6,7 @@ export interface CreateBusinessDTO {
   address?: string;
   phone?: string;
   category?: string;
+  categoryId?: number;
   logoUrl?: string;
   latitude?: number;
   longitude?: number;
@@ -19,6 +20,7 @@ export interface UpdateBusinessDTO {
   address?: string;
   phone?: string;
   category?: string;
+  categoryId?: number;
   logoUrl?: string;
   latitude?: number;
   longitude?: number;
@@ -27,7 +29,7 @@ export interface UpdateBusinessDTO {
 }
 
 export interface IBusinessRepository {
-  findAll(skip: number, take: number): Promise<[any[], number]>;
+  findAll(skip: number, take: number, search?: string): Promise<[any[], number]>;
   findById(id: number): Promise<any | null>;
   findByOwnerId(ownerId: number): Promise<Business[]>;
   create(ownerId: number, data: CreateBusinessDTO): Promise<Business>;
