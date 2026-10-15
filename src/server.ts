@@ -13,7 +13,19 @@ import categoryRoutes from './routes/category.routes';
 import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
 
+import fs from 'fs';
+
 const app = express();
+
+// Request logger for debugging mobile connectivity
+app.use((req, res, next) => {
+  const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url} (ip: ${req.ip})\n`;
+  console.log(logLine.trim());
+  try {
+    fs.appendFileSync('requests.log', logLine);
+  } catch {}
+  next();
+});
 
 app.use(helmet());
 app.use(cors());

@@ -84,6 +84,9 @@ export class AppointmentController {
 
   getAppointmentById = async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      throw new AppError('ID de turno inválido', 400);
+    }
     const user = (req as any).user;
 
     const appointment = await this.appointmentService.getAppointmentById(id, user.id, user.role);
