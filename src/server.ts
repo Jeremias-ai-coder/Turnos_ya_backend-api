@@ -23,7 +23,7 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Routes v1
 app.use('/health', healthRoutes);
 app.use('/api/health', healthRoutes);
 app.use('/api/v1/health', healthRoutes);
@@ -35,6 +35,15 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
+
+// Direct route aliases (para compatibilidad si el cliente omite /api/v1)
+app.use('/auth', authRoutes);
+app.use('/users', authRoutes);
+app.use('/businesses', businessRoutes);
+app.use('/categories', categoryRoutes);
+app.use('/appointments', appointmentRoutes);
+app.use('/notifications', notificationRoutes);
+app.use('/admin', adminRoutes);
 
 // Global error handler (RFC 7807)
 app.use(errorHandler);
