@@ -18,8 +18,11 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
+  const isProduction = process.env.NODE_ENV === 'production';
   const statusCode = err instanceof AppError ? err.statusCode : 500;
-  const message = err.message || 'Error interno del servidor';
+  const message = (statusCode === 500 && isProduction)
+    ? 'Error interno del servidor'
+    : (err.message || 'Error interno del servidor');
   const errorName = err instanceof AppError && statusCode < 500 ? 'Bad Request' : 'Internal Server Error';
   
   const errorResponse = {

@@ -12,5 +12,5 @@
     "lib": ["ES2022", "DOM"]
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "_legacy_php"]
+  "exclude": ["node_modules", "dist", "_legacy_php", "src/**/*.test.ts", "src/**/*.spec.ts"]
 }

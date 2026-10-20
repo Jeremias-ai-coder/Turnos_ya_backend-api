@@ -12,8 +12,12 @@ import notificationRoutes from './routes/notification.routes';
 import categoryRoutes from './routes/category.routes';
 import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
+import { requestLogger } from './middlewares/requestLogger';
+import { startKeepAlive } from './utils/keepAlive';
 
 const app = express();
+
+app.use(requestLogger);
 
 app.use(helmet());
 app.use(cors());
@@ -37,8 +41,13 @@ app.use(errorHandler);
 
 const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
+  if (process.env.NODE_ENV === 'production' && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'super_secret' || process.env.JWT_SECRET === 'cambiar_por_clave_secreta_jwt')) {
+    console.warn('\x1b[33m%s\x1b[0m', '⚠️ ADVERTENCIA DE SEGURIDAD: JWT_SECRET no está configurado o utiliza un valor por defecto inseguro en producción.');
+  }
   console.log(`Server is running on 0.0.0.0:${PORT}`);
   // Iniciar tarea periódica de recordatorios de turnos (cada 60 segundos)
   reminderJob.start(60000);
+  // Iniciar auto-ping Keep-Alive para Render / QA
+  startKeepAlive(10);
 });
 

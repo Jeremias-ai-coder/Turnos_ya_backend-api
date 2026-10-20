@@ -14,6 +14,7 @@ export interface UpdateUserDTO {
   emailNotifications?: boolean;
   whatsappNotifications?: boolean;
   role?: Role;
+  password?: string;
 }
 
 export interface IUserRepository {

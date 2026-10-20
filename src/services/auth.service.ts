@@ -62,6 +62,31 @@ export class AuthService {
     return this.sanitizeUser(updated);
   }
 
+  async changePassword(userId: number, currentPassword: string, newPassword: string) {
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      throw new AppError('La nueva contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    const isValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isValid) {
+      throw new AppError('La contraseña actual es incorrecta', 401);
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.update(userId, { password: hashedPassword });
+
+    return { message: 'Contraseña actualizada correctamente' };
+  }
+
   private sanitizeUser(user: any) {
     return {
       id: user.id,

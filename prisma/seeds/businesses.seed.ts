@@ -18,16 +18,27 @@ export async function seedBusinesses(prisma: PrismaClient) {
         normalizeText(c.name) === normBizCat
       );
 
-      if (matched && biz.categoryId !== matched.id) {
+      const coordsMap: Record<number, { lat: number; lon: number }> = {
+        10: { lat: -34.6150, lon: -58.3750 },
+        11: { lat: -34.6041, lon: -58.3871 },
+        12: { lat: -34.5878, lon: -58.4116 },
+        13: { lat: -34.5898, lon: -58.4312 },
+        14: { lat: -34.6198, lon: -58.4412 },
+        15: { lat: -34.5458, lon: -58.4592 },
+        16: { lat: -34.5885, lon: -58.4285 },
+      };
+
+      const coords = coordsMap[biz.id];
+      if ((matched && biz.categoryId !== matched.id) || (coords && (!biz.latitude || !biz.longitude))) {
         await prisma.business.update({
           where: { id: biz.id },
           data: {
-            categoryId: matched.id,
-            category: matched.name
+            ...(matched ? { categoryId: matched.id, category: matched.name } : {}),
+            ...(coords ? { latitude: coords.lat, longitude: coords.lon } : {}),
           }
         });
         linkedCount++;
-        console.log(`   ✔ "${biz.name}" vinculado a "${matched.name}" (ID ${matched.id})`);
+        console.log(`   ✔ "${biz.name}" actualizado con categoría y coordenadas GPS`);
       }
     }
   }
