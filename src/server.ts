@@ -12,8 +12,8 @@ import notificationRoutes from './routes/notification.routes';
 import categoryRoutes from './routes/category.routes';
 import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
-
 import { requestLogger } from './middlewares/requestLogger';
+import { startKeepAlive } from './utils/keepAlive';
 
 const app = express();
 
@@ -47,5 +47,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on 0.0.0.0:${PORT}`);
   // Iniciar tarea periódica de recordatorios de turnos (cada 60 segundos)
   reminderJob.start(60000);
+  // Iniciar auto-ping Keep-Alive para Render / QA
+  startKeepAlive(10);
 });
 
