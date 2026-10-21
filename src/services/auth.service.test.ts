@@ -304,12 +304,28 @@ describe('AuthService (Unit Tests)', () => {
         name: 'Carlos Seguro',
         email: 'carlos@example.com',
         password: currentPasswordHash,
+        emailVerified: true,
       } as any);
 
       const res = await authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456');
       expect(res.requiresConfirmation).toBe(true);
       expect(res.confirmationToken).toBeDefined();
       expect(res.qaCode).toHaveLength(6);
+    });
+
+    it('debe bloquear el cambio de contraseña si el correo del usuario no está verificado', async () => {
+      const currentPasswordHash = await bcrypt.hash('passwordActual123', 10);
+      mockUserRepo.findById.mockResolvedValue({
+        id: 15,
+        name: 'Carlos Seguro',
+        email: 'carlos@example.com',
+        password: currentPasswordHash,
+        emailVerified: false,
+      } as any);
+
+      await expect(
+        authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456')
+      ).rejects.toMatchObject({ statusCode: 403 });
     });
 
     it('debe confirmar el cambio de contraseña con el código y token válidos', async () => {
@@ -319,6 +335,7 @@ describe('AuthService (Unit Tests)', () => {
         name: 'Carlos Seguro',
         email: 'carlos@example.com',
         password: currentPasswordHash,
+        emailVerified: true,
       } as any);
       mockUserRepo.update.mockResolvedValue({} as any);
 

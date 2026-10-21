@@ -118,6 +118,10 @@ export class AuthService {
       throw new AppError('Usuario no encontrado', 404);
     }
 
+    if (!(user as any).emailVerified) {
+      throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
+    }
+
     const isValid = await bcrypt.compare(currentPassword, user.password);
     if (!isValid) {
       throw new AppError('La contraseña actual es incorrecta', 401);
@@ -206,6 +210,10 @@ export class AuthService {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!(user as any).emailVerified) {
+      throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
     }
 
     await this.userRepo.update(userId, { password: decoded.hashedNewPassword });
