@@ -143,6 +143,8 @@ export class AuthService {
     return {
       message: 'Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña.',
       sent: emailResult.sent,
+      reason: emailResult.reason || (emailResult.sent ? undefined : 'smtp-failed'),
+      emailError: emailResult.error,
       // En modo híbrido / desarrollo / preview, devolvemos el resetUrl para pruebas inmediatas
       resetUrl,
       resetToken: token,
