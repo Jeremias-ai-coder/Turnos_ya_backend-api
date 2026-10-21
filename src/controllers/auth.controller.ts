@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../services/auth.service';
 import { AppError } from '../middlewares/errorHandler';
-import { registerSchema, loginSchema } from '../validators/auth.validator';
+import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, googleAuthSchema } from '../validators/auth.validator';
 
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -53,6 +53,39 @@ export class AuthController {
     const { currentPassword, newPassword } = req.body;
 
     const result = await this.authService.changePassword(userId, currentPassword, newPassword);
+    res.json(result);
+  };
+
+  forgotPassword = async (req: Request, res: Response) => {
+    const parsed = forgotPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
+      throw new AppError('Datos inválidos', 400, details);
+    }
+
+    const result = await this.authService.forgotPassword(parsed.data.email);
+    res.json(result);
+  };
+
+  resetPassword = async (req: Request, res: Response) => {
+    const parsed = resetPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
+      throw new AppError('Datos inválidos', 400, details);
+    }
+
+    const result = await this.authService.resetPassword(parsed.data.token, parsed.data.newPassword);
+    res.json(result);
+  };
+
+  googleAuth = async (req: Request, res: Response) => {
+    const parsed = googleAuthSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
+      throw new AppError('Datos inválidos', 400, details);
+    }
+
+    const result = await this.authService.loginWithGoogle(parsed.data);
     res.json(result);
   };
 }
