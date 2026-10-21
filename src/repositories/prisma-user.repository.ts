@@ -23,7 +23,8 @@ export class PrismaUserRepository implements IUserRepository {
         email: data.email,
         password: data.password,
         role: data.role || 'client',
-        phone: data.phone
+        phone: data.phone,
+        emailVerified: data.emailVerified ?? false
       }
     });
   }

@@ -6,11 +6,13 @@ export interface CreateUserDTO {
   password: string;
   role?: Role;
   phone?: string;
+  emailVerified?: boolean;
 }
 
 export interface UpdateUserDTO {
   name?: string;
   phone?: string;
+  emailVerified?: boolean;
   emailNotifications?: boolean;
   whatsappNotifications?: boolean;
   role?: Role;
