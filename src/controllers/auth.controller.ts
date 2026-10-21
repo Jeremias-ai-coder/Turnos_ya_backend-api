@@ -50,9 +50,25 @@ export class AuthController {
 
   changePassword = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
+    const { currentPassword, newPassword, confirmationToken, code } = req.body;
+
+    const result = await this.authService.changePassword(userId, currentPassword, newPassword, code, confirmationToken);
+    res.json(result);
+  };
+
+  requestPasswordChange = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
     const { currentPassword, newPassword } = req.body;
 
-    const result = await this.authService.changePassword(userId, currentPassword, newPassword);
+    const result = await this.authService.requestPasswordChange(userId, currentPassword, newPassword);
+    res.json(result);
+  };
+
+  confirmPasswordChange = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { confirmationToken, code } = req.body;
+
+    const result = await this.authService.confirmPasswordChange(userId, confirmationToken, code);
     res.json(result);
   };
 

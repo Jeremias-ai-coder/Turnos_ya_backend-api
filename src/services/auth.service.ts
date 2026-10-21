@@ -24,6 +24,37 @@ export class AuthService {
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
 
+    // Enviar correo de bienvenida y confirmación de registro
+    const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
+    sendEmail({
+      to: user.email,
+      subject: '¡Bienvenido a Turnos Ya! Tu cuenta ha sido creada con éxito',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Tu plataforma de turnos online</p>
+          </div>
+          <p style="font-size: 16px; color: #1e293b;">¡Hola <strong>${user.name}</strong>!</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+            Te damos la bienvenida a <strong>Turnos Ya</strong>. Tu cuenta ha sido creada exitosamente asociada al correo <strong>${user.email}</strong>.
+          </p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.6;">
+            A partir de ahora podrás explorar los mejores negocios y profesionales, reservar turnos online las 24 horas y recibir recordatorios automáticos de tus citas.
+          </p>
+          <div style="text-align: center; margin: 28px 0;">
+            <a href="${frontendUrl}" style="background-color: #009ee3; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
+              Comenzar a explorar Turnos Ya
+            </a>
+          </div>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+            Si no creaste esta cuenta, puedes desestimar este mensaje de forma segura.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error enviando correo de bienvenida:', err));
+
     return {
       token,
       user: this.sanitizeUser(user)
@@ -63,7 +94,17 @@ export class AuthService {
     return this.sanitizeUser(updated);
   }
 
-  async changePassword(userId: number, currentPassword: string, newPassword: string) {
+  async changePassword(userId: number, currentPassword?: string, newPassword?: string, code?: string, confirmationToken?: string) {
+    if (confirmationToken && code) {
+      return this.confirmPasswordChange(userId, confirmationToken, code);
+    }
+    if (!currentPassword || !newPassword) {
+      throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
+    }
+    return this.requestPasswordChange(userId, currentPassword, newPassword);
+  }
+
+  async requestPasswordChange(userId: number, currentPassword: string, newPassword: string) {
     if (!currentPassword || !newPassword) {
       throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
     }
@@ -82,10 +123,107 @@ export class AuthService {
       throw new AppError('La contraseña actual es incorrecta', 401);
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.userRepo.update(userId, { password: hashedPassword });
+    // Generar código numérico de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    return { message: 'Contraseña actualizada correctamente' };
+    // Token firmado por 10 minutos
+    const confirmationToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        code,
+        hashedNewPassword,
+        type: 'PASSWORD_CHANGE_CONFIRM',
+      },
+      JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    // Ocultar parcialmente el correo: j***s@dominio.com
+    const emailParts = user.email.split('@');
+    const maskedUser = emailParts[0].length > 2
+      ? emailParts[0][0] + '***' + emailParts[0].slice(-1)
+      : emailParts[0];
+    const maskedEmail = `${maskedUser}@${emailParts[1]}`;
+
+    sendEmail({
+      to: user.email,
+      subject: 'Código de confirmación para cambio de contraseña - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de tu cuenta</p>
+          </div>
+          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+            Recibimos una solicitud para modificar la contraseña de tu cuenta desde tu panel de perfil. 
+            Para autorizar este cambio, ingresa el siguiente código de verificación de 6 dígitos:
+          </p>
+          <div style="text-align: center; margin: 24px 0;">
+            <div style="display: inline-block; background: #f0f9ff; border: 2px dashed #009ee3; padding: 14px 32px; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #009ee3; border-radius: 10px;">
+              ${code}
+            </div>
+            <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Este código es válido por 10 minutos.</p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #dc2626; margin: 0;">
+            ⚠️ Si tú no realizaste esta solicitud, nadie puede cambiar tu contraseña sin este código. Te sugerimos revisar la seguridad de tu cuenta.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error al enviar código de cambio de contraseña:', err));
+
+    return {
+      requiresConfirmation: true,
+      message: `Hemos enviado un código de confirmación de 6 dígitos a ${maskedEmail}.`,
+      confirmationToken,
+      qaCode: code, // Permite pruebas automáticas inmediatas
+    };
+  }
+
+  async confirmPasswordChange(userId: number, confirmationToken: string, code: string) {
+    if (!confirmationToken || !code) {
+      throw new AppError('El token de confirmación y el código son requeridos', 400);
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(confirmationToken, JWT_SECRET);
+    } catch {
+      throw new AppError('El código o enlace de confirmación ha expirado o es inválido', 400);
+    }
+
+    if (decoded.type !== 'PASSWORD_CHANGE_CONFIRM' || decoded.userId !== userId) {
+      throw new AppError('El token de confirmación no corresponde al usuario actual', 403);
+    }
+
+    if (decoded.code !== code.trim()) {
+      throw new AppError('El código de verificación ingresado es incorrecto', 400);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    await this.userRepo.update(userId, { password: decoded.hashedNewPassword });
+
+    sendEmail({
+      to: user.email,
+      subject: 'Tu contraseña ha sido actualizada - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <h2 style="color: #009ee3; margin-top: 0;">Turnos Ya</h2>
+          <p>Hola <strong>${user.name}</strong>,</p>
+          <p>Te confirmamos que la contraseña de tu cuenta ha sido actualizada exitosamente desde tu panel de seguridad.</p>
+          <p style="font-size: 12px; color: #94a3b8;">Si no realizaste esta acción, por favor comunícate de inmediato con el soporte de Turnos Ya.</p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error al enviar confirmación de cambio:', err));
+
+    return { message: 'Contraseña actualizada correctamente.' };
   }
 
   async forgotPassword(email: string) {

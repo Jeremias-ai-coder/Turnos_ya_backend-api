@@ -295,5 +295,41 @@ describe('AuthService (Unit Tests)', () => {
       expect(mockUserRepo.create).toHaveBeenCalled();
     });
   });
+
+  describe('requestPasswordChange & confirmPasswordChange', () => {
+    it('debe solicitar cambio de contraseña y emitir token de confirmación con código de 6 dígitos', async () => {
+      const currentPasswordHash = await bcrypt.hash('passwordActual123', 10);
+      mockUserRepo.findById.mockResolvedValue({
+        id: 15,
+        name: 'Carlos Seguro',
+        email: 'carlos@example.com',
+        password: currentPasswordHash,
+      } as any);
+
+      const res = await authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456');
+      expect(res.requiresConfirmation).toBe(true);
+      expect(res.confirmationToken).toBeDefined();
+      expect(res.qaCode).toHaveLength(6);
+    });
+
+    it('debe confirmar el cambio de contraseña con el código y token válidos', async () => {
+      const currentPasswordHash = await bcrypt.hash('passwordActual123', 10);
+      mockUserRepo.findById.mockResolvedValue({
+        id: 15,
+        name: 'Carlos Seguro',
+        email: 'carlos@example.com',
+        password: currentPasswordHash,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({} as any);
+
+      const reqRes = await authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456');
+      const confirmRes = await authService.confirmPasswordChange(15, reqRes.confirmationToken, reqRes.qaCode!);
+
+      expect(confirmRes.message).toContain('Contraseña actualizada correctamente');
+      expect(mockUserRepo.update).toHaveBeenCalledWith(15, expect.objectContaining({
+        password: expect.any(String),
+      }));
+    });
+  });
 });
 
