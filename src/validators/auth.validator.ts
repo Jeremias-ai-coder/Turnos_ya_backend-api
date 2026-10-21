@@ -11,3 +11,22 @@ export const loginSchema = z.object({
   email: z.string().email('Debe ser un correo electrónico válido'),
   password: z.string().min(1, 'La contraseña es requerida')
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Debe ser un correo electrónico válido')
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(10, 'El token es requerido o inválido'),
+  newPassword: z.string().min(6, 'La nueva contraseña debe tener al menos 6 caracteres')
+});
+
+export const googleAuthSchema = z.object({
+  credential: z.string().optional(),
+  email: z.string().email().optional(),
+  name: z.string().optional(),
+  googleId: z.string().optional()
+}).refine(data => data.credential || (data.email && data.name), {
+  message: 'Debe enviar una credencial de Google válida o los datos de usuario'
+});
+

@@ -220,4 +220,80 @@ describe('AuthService (Unit Tests)', () => {
       expect(updated).not.toHaveProperty('password');
     });
   });
+
+  describe('forgotPassword & resetPassword', () => {
+    it('debe generar enlace de recuperación para un usuario existente', async () => {
+      mockUserRepo.findByEmail.mockResolvedValue({
+        id: 7,
+        name: 'Carlos Test',
+        email: 'carlos@example.com',
+        password: 'hashedPassword123',
+      } as any);
+
+      const res = await authService.forgotPassword('carlos@example.com');
+      expect(res.message).toContain('Si el correo electrónico está registrado');
+      expect(res.resetToken).toBeDefined();
+      expect(res.resetUrl).toContain(res.resetToken);
+    });
+
+    it('debe responder genéricamente sin error si el email no existe', async () => {
+      mockUserRepo.findByEmail.mockResolvedValue(null);
+
+      const res = await authService.forgotPassword('inexistente@example.com');
+      expect(res.message).toContain('Si el correo electrónico está registrado');
+      expect(res.sent).toBe(false);
+    });
+
+    it('debe restablecer la contraseña exitosamente con token válido', async () => {
+      const originalPassword = 'currentPasswordHash';
+      mockUserRepo.findByEmail.mockResolvedValue({
+        id: 8,
+        name: 'Maria Test',
+        email: 'maria@example.com',
+        password: originalPassword,
+      } as any);
+
+      const forgotRes = await authService.forgotPassword('maria@example.com');
+      const token = forgotRes.resetToken!;
+
+      mockUserRepo.findById.mockResolvedValue({
+        id: 8,
+        name: 'Maria Test',
+        email: 'maria@example.com',
+        password: originalPassword,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({} as any);
+
+      const resetRes = await authService.resetPassword(token, 'nuevaPass123');
+      expect(resetRes.message).toContain('Contraseña actualizada correctamente');
+      expect(mockUserRepo.update).toHaveBeenCalledWith(8, expect.objectContaining({
+        password: expect.any(String),
+      }));
+    });
+  });
+
+  describe('loginWithGoogle', () => {
+    it('debe autenticar o crear usuario con datos de Google', async () => {
+      mockUserRepo.findByEmail.mockResolvedValue(null);
+      mockUserRepo.create.mockResolvedValue({
+        id: 20,
+        name: 'Google User',
+        email: 'googleuser@gmail.com',
+        role: 'client',
+        password: 'randomHashedPassword',
+      } as any);
+
+      const res = await authService.loginWithGoogle({
+        email: 'googleuser@gmail.com',
+        name: 'Google User',
+        googleId: '1234567890',
+      });
+
+      expect(res).toHaveProperty('token');
+      expect(res.user.email).toBe('googleuser@gmail.com');
+      expect(res.user.name).toBe('Google User');
+      expect(mockUserRepo.create).toHaveBeenCalled();
+    });
+  });
 });
+
