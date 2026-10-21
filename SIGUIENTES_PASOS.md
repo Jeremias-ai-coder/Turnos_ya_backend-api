@@ -1,138 +1,72 @@
-# Siguientes pasos para Turnos Ya
+# 📌 Estado Actual y Hoja de Ruta (Roadmap) — Turnos_ya Backend
 
-## 1) Configurar la cuenta real de Gmail
-
-Antes de probar el envío de emails reales, hay que completar la configuración de SMTP en el archivo `.env`.
-
-### Completar en `.env`
-
-```env
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=tu_email@gmail.com
-EMAIL_PASS=tu_app_password_de_gmail
-EMAIL_FROM="Turnos Ya <tu_email@gmail.com>"
-```
-
-### Importante
-- `EMAIL_USER` debe ser la cuenta real de Gmail que va a enviar correos.
-- `EMAIL_PASS` no es la contraseña normal de Gmail.
-- Debe ser una "App Password" generada desde Google.
-- `EMAIL_FROM` puede ser el mismo correo o un alias del negocio.
-
-### Cómo crear la App Password en Gmail
-1. Entrar a la cuenta de Gmail del negocio.
-2. Ir a Seguridad.
-3. Activar verificación en dos pasos si todavía no está habilitada.
-4. Crear una "App Password".
-5. Copiar la contraseña generada.
-6. Pegar esa contraseña en `EMAIL_PASS`.
+Este documento detalla el estado actual de las funcionalidades de comunicación, autenticación y servicios en segundo plano del backend, así como los próximos pasos para la puesta en producción y evolución del sistema.
 
 ---
 
-## 2) Probar el envío de email en local
+## 🎯 1. Funcionalidades de Comunicación y Autenticación (100% Operativas)
 
-Una vez completado el `.env`, hay que levantar el backend y verificar que el servicio de correo funcione.
+1. **Configuración de SMTP Real con Gmail:**
+   - Envío de correos transaccionales mediante Nodemailer con App Password de Google de 16 caracteres.
+   - Plantillas HTML responsivas con estilos de marca.
 
-### Comando
-```bash
-cd c:/xampp/htdocs/Turnos_Ya/Turnos_ya_backend-api
-npm run dev
-```
+2. **Recuperación de Contraseña:**
+   - Flujo de olvido de contraseña con generación de token temporal seguro (`/api/v1/auth/forgot-password`).
+   - Envío de enlace directo al correo del usuario y reseteo en pantalla (`/api/v1/auth/reset-password`).
+   - Modal de contingencia en entorno de desarrollo/QA si no hay conexión externa a internet.
 
-### Prueba sugerida
-1. Crear un usuario con email válido.
-2. Agendar un turno futuro con estado confirmado.
-3. Esperar el recordatorio de 1 hora.
-4. Verificar si llega el email.
+3. **Verificación de Correo Electrónico Progresiva:**
+   - Envío de email de bienvenida con código numérico de 6 dígitos.
+   - Enlace directo de validación en 1 clic: `/verify-email?token=...`.
+   - Panel interactivo en el Perfil de usuario con validación de código de 6 dígitos.
+   - Banner superior informativo no bloqueante en el frontend.
+   - Cuentas iniciadas mediante **Google OAuth 2.0** quedan auto-verificadas desde el primer instante.
 
----
+4. **Cambio de Contraseña Seguro desde Perfil (2FA por Correo):**
+   - El usuario solicita cambiar su contraseña ingresando la actual.
+   - El sistema despacha un código de seguridad de 6 dígitos a su correo electrónico.
+   - El cambio solo se confirma cuando el usuario introduce dicho código correctamente.
 
-## 3) Verificar que el usuario puede activar/desactivar notificaciones
-
-En el frontend, el tab de notificaciones debe guardar en la base datos los valores:
-- `emailNotifications`
-- `whatsappNotifications`
-
-### Revisión
-- El usuario entra al tab de perfil > Notificaciones.
-- Activa o desactiva Email.
-- Guarda.
-- Se actualiza el valor en la base de datos.
-- Al recargar la página, sigue estando marcado o no.
+5. **Recordatorios Automatizados de Turnos (Worker en Segundo Plano):**
+   - Tarea periódica ejecutándose cada 60 segundos (`reminderJob.start(60000)`).
+   - Detecta reservas en estado `CONFIRMED` dentro de la ventana de 65 minutos previos al turno.
+   - Genera notificación in-app y despacha email de recordatorio si el usuario tiene `emailNotifications = true`.
 
 ---
 
-## 4) Confirmar que los recordatorios solo envían email si está habilitado
+## ✅ 2. Checklist de Estado del Sistema
 
-La lógica del backend no debe enviar email si el usuario desactivó esa preference.
-
-### Regla esperada
-- `emailNotifications = true` => enviar email
-- `emailNotifications = false` => no enviar email
-
-Esto ya quedó preparado en la lógica de recordatorios.
-
----
-
-## 5) Dejar preparado el flujo para WhatsApp futuro
-
-WhatsApp real no es una integración simple como Gmail.
-
-### Lo que falta para hacerlo bien
-- elegir un proveedor o la Meta API oficial
-- registrar el número del negocio
-- configurar webhook o token
-- definir plantillas de mensajes
-- definir si el envío se hace por negocio o por agencia
-
-### Recomendación
-- Por ahora dejar WhatsApp como segunda etapa.
-- Gmail/SMTP como primer canal real funcionando.
+- [x] Configuración de `.env` con credenciales de Gmail SMTP (`turnosyapp@gmail.com`).
+- [x] Pruebas de envío real de email validadas exitosamente.
+- [x] Flujo de recuperación de contraseñas (solicitud, token y reseteo).
+- [x] Email HTML de bienvenida tras el registro de usuario.
+- [x] Panel de verificación de correo en Perfil con código de 6 dígitos.
+- [x] Página dedicada `/verify-email?token=...` para validación en 1 clic.
+- [x] Auto-verificación de usuarios al autenticarse con Google OAuth.
+- [x] Confirmación de cambio de contraseña con código de 6 dígitos por email.
+- [x] Worker de recordatorios de turnos (1 hora antes) con control de preferencias del usuario.
+- [x] Preferencias de usuario persistidas en BD (`emailNotifications`, `whatsappNotifications`).
+- [x] Cobertura de pruebas unitarias con Jest para Auth, Appointments y Businesses.
+- [x] Endpoint de salud `/health` con comprobación de MySQL en vivo y tiempo de actividad.
+- [x] Scripts de sincronización de datos y asignación de administrador.
 
 ---
 
-## 6) Probar en entorno real
+## 🔮 3. Próximos Pasos (Roadmap de Evolución)
 
-Cuando ya esté la cuenta de Gmail y el backend funcionando, conviene hacer una prueba de producción con:
-- un usuario real
-- un turno real
-- recordatorio real
-- email enviado al Gmail del usuario
+### Fase A: Optimización para Entornos Cloud (Render / Railway)
+- [ ] **Proveedor de Correo HTTP en la Nube:**
+  - En plataformas como Render, los puertos SMTP tradicionales (25, 465, 587) pueden encontrarse bloqueados o limitados en planes gratuitos.
+  - Se recomienda incorporar un adaptador para **Resend**, **SendGrid** o **Amazon SES** vía API HTTP (puerto 443) como alternativa o fallback al SMTP directo.
 
-Con esto se valida que funciona el flujo completo.
+### Fase B: Integración Oficial de WhatsApp
+- [ ] **Meta Cloud API / Twilio WhatsApp:**
+  - Registro de cuenta de negocio en Meta Business Manager.
+  - Configuración del número de teléfono corporativo y Webhook de estados.
+  - Aprobación de plantillas oficiales de mensajes (*WhatsApp Message Templates*) para recordatorios de turnos y confirmaciones de reserva.
 
----
-
-## 7) Checklist de estado del MVP
-
-- [x] Completar `.env` con Gmail real (`turnosyapp@gmail.com` con App Password de 16 letras)
-- [x] Probar envío real de email a través de Gmail (probado y entregado exitosamente a `jeremiascoll@gmail.com`)
-- [x] Recuperación de contraseña con enlace seguro directo y token automático
-- [x] Email de bienvenida y confirmación de registro de usuario
-- [x] Confirmación de cambio de contraseña con código de 6 dígitos enviado por email en el panel de perfil
-- [x] Verificación de correo progresiva con banner discreto en cabecera y botón de verificación
-- [x] Panel de verificación interactivo en Perfil con código de 6 dígitos y botón de modo QA
-- [x] Página dedicada y directa `/verify-email?token=...` para validación en 1 clic
-- [x] Auto-verificación de cuentas que inician sesión mediante Google OAuth
-- [x] Confirmar recordatorios de turnos (1 hora antes) con envío de email si `emailNotifications = true`
-- [x] Verificar usuarios con `emailNotifications` y `whatsappNotifications` en perfil
-- [ ] Dejar WhatsApp para una segunda etapa (Meta Business Cloud API / Twilio)
-- [ ] Evaluar proveedor HTTP en la nube (ej. Resend) para producción en Render (por bloqueo de puertos SMTP)
-- [ ] Pruebas finales de aceptación de usuario (UAT) en flujo de reserva y notificaciones
-
----
-
-## 8) Estado actual de las funcionalidades de comunicación
-
-1. **Recuperación de contraseña:** 100% operativo tanto con correo real como con enlace de contingencia / QA en pantalla.
-2. **Registro de usuarios:** Envía automáticamente un correo HTML de bienvenida con enlace a la plataforma sin bloquear el onboarding.
-3. **Verificación de correo electrónico (Progresiva):**
-   - Banner superior informativo si el usuario no tiene el email verificado.
-   - Badge distintivo en el Perfil (`✓ Correo verificado` vs `⚠️ Pendiente de verificación`).
-   - Envío de código de 6 dígitos por email con botón interactivo de verificación en el perfil.
-   - Enlace directo de validación en un clic (`/verify-email?token=...`).
-   - Cuentas de Google OAuth pre-verificadas automáticamente.
-4. **Cambio de contraseña desde Perfil:** Solicita contraseña actual, envía código numérico de 6 dígitos al correo del usuario y exige validación antes de actualizar la clave en base de datos.
-5. **Recordatorios de turnos:** El worker en segundo plano detecta turnos a menos de 65 minutos y envía tanto notificación en la aplicación como correo electrónico si el usuario tiene `emailNotifications` activo.
-
+### Fase C: Automatización y Despliegue Continuo (CI/CD)
+- [ ] Configuración de GitHub Actions para ejecución automática de:
+  - Linter y comprobación de tipos TypeScript (`npm run build`).
+  - Suite de pruebas unitarias (`npm test`).
+  - Despliegue automático a producción tras merge en la rama `main`.
