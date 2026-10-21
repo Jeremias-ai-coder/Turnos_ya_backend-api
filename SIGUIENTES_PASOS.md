@@ -104,23 +104,25 @@ Con esto se valida que funciona el flujo completo.
 
 ---
 
-## 7) Checklist final antes de cerrar el MVP
+## 7) Checklist de estado del MVP
 
-- [ ] Completar `.env` con Gmail real
-- [ ] Probar envío de email
-- [ ] Verificar usuarios con `emailNotifications`
-- [ ] Confirmar recordatorios con email
-- [ ] Dejar WhatsApp para una segunda etapa
-- [ ] Revisar si hace falta un panel administrativo para ver notificaciones
+- [x] Completar `.env` con Gmail real (`turnosyapp@gmail.com` con App Password de 16 letras)
+- [x] Probar envío real de email a través de Gmail (probado y entregado exitosamente a `jeremiascoll@gmail.com`)
+- [x] Recuperación de contraseña con enlace seguro directo y token automático
+- [x] Email de bienvenida y confirmación de registro de usuario
+- [x] Confirmación de cambio de contraseña con código de 6 dígitos enviado por email en el panel de perfil
+- [x] Confirmar recordatorios de turnos (1 hora antes) con envío de email si `emailNotifications = true`
+- [x] Verificar usuarios con `emailNotifications` y `whatsappNotifications` en perfil
+- [ ] Dejar WhatsApp para una segunda etapa (Meta Business Cloud API / Twilio)
+- [ ] Evaluar proveedor HTTP en la nube (ej. Resend) para producción en Render (por bloqueo de puertos SMTP)
+- [ ] Pruebas finales de aceptación de usuario (UAT) en flujo de reserva y notificaciones
 
 ---
 
-## 8) Observación importante
+## 8) Estado actual de las funcionalidades de comunicación
 
-El proyecto ya tiene la lógica de recordatorios y notificaciones base. Lo que falta para “hacerlo funcionar de verdad” es simplemente:
-- cuenta Gmail real
-- App Password
-- configuración del `.env`
-- pruebas con un usuario real
+1. **Recuperación de contraseña:** 100% operativo tanto con correo real como con enlace de contingencia / QA en pantalla.
+2. **Registro de usuarios:** Envía automáticamente un correo HTML de bienvenida con enlace a la plataforma.
+3. **Cambio de contraseña desde Perfil:** Solicita contraseña actual, envía código numérico de 6 dígitos al correo del usuario y exige validación antes de actualizar la clave en base de datos.
+4. **Recordatorios de turnos:** El worker en segundo plano detecta turnos a menos de 65 minutos y envía tanto notificación en la aplicación como correo electrónico si el usuario tiene `emailNotifications` activo.
 
-Una vez hecho eso, el sistema queda listo para enviar avisos por email de forma real.
