@@ -187,6 +187,179 @@ export class AuthService {
     };
   }
 
+  async requestPasswordChangeCode(userId: number) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!(user as any).emailVerified) {
+      throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
+    }
+
+    // Generar código numérico de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Token firmado por 15 minutos
+    const confirmationToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        code,
+        type: 'PASSWORD_CHANGE_CODE',
+      },
+      JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    // Ocultar parcialmente el correo: j***s@dominio.com
+    const emailParts = user.email.split('@');
+    const maskedUser = emailParts[0].length > 2
+      ? emailParts[0][0] + '***' + emailParts[0].slice(-1)
+      : emailParts[0];
+    const maskedEmail = `${maskedUser}@${emailParts[1]}`;
+
+    sendEmail({
+      to: user.email,
+      subject: 'Código de seguridad para cambiar tu contraseña - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de tu cuenta</p>
+          </div>
+          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+            Recibimos una solicitud para modificar la contraseña de tu cuenta desde tu panel de seguridad.
+            Para autorizar el cambio, ingresa el siguiente código de verificación de 6 dígitos:
+          </p>
+          <div style="text-align: center; margin: 24px 0;">
+            <div style="display: inline-block; background: #f0f9ff; border: 2px dashed #009ee3; padding: 14px 32px; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #009ee3; border-radius: 10px;">
+              ${code}
+            </div>
+            <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Este código es válido por 15 minutos.</p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #dc2626; margin: 0;">
+            ⚠️ Si tú no realizaste esta solicitud, nadie puede cambiar tu contraseña sin este código de verificación.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error al enviar código de cambio de contraseña:', err));
+
+    return {
+      message: `Hemos enviado un código de confirmación de 6 dígitos a ${maskedEmail}.`,
+      confirmationToken,
+      qaCode: code, // Permite pruebas automáticas inmediatas
+    };
+  }
+
+  async verifyPasswordChangeCode(userId: number, confirmationToken: string, code: string) {
+    if (!confirmationToken || !code) {
+      throw new AppError('El token de confirmación y el código son requeridos', 400);
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(confirmationToken, JWT_SECRET);
+    } catch {
+      throw new AppError('El código o token de confirmación ha expirado o es inválido', 400);
+    }
+
+    if (decoded.type !== 'PASSWORD_CHANGE_CODE' || decoded.userId !== userId) {
+      throw new AppError('El token no corresponde al usuario actual', 403);
+    }
+
+    if (decoded.code !== code.trim()) {
+      throw new AppError('El código de verificación ingresado es incorrecto', 400);
+    }
+
+    const changeAuthToken = jwt.sign(
+      {
+        userId,
+        email: decoded.email,
+        type: 'PASSWORD_CHANGE_AUTHORIZED',
+      },
+      JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    return {
+      valid: true,
+      message: 'Código de seguridad verificado correctamente.',
+      changeAuthToken,
+    };
+  }
+
+  async submitPasswordChange(userId: number, data: { changeAuthToken: string; currentPassword?: string; newPassword: string; skipCurrentPassword?: boolean }) {
+    if (!data.changeAuthToken) {
+      throw new AppError('Token de autorización faltante', 400);
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(data.changeAuthToken, JWT_SECRET);
+    } catch {
+      throw new AppError('La autorización ha expirado. Por favor solicita un nuevo código.', 401);
+    }
+
+    if (decoded.type !== 'PASSWORD_CHANGE_AUTHORIZED' || decoded.userId !== userId) {
+      throw new AppError('Token de autorización no válido para este usuario', 403);
+    }
+
+    if (!data.newPassword || data.newPassword.length < 6) {
+      throw new AppError('La nueva contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!data.skipCurrentPassword) {
+      if (!data.currentPassword) {
+        throw new AppError('Debes ingresar tu contraseña actual', 400);
+      }
+      const isValid = await bcrypt.compare(data.currentPassword, user.password);
+      if (!isValid) {
+        throw new AppError('La contraseña actual es incorrecta', 401);
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(data.newPassword, 10);
+    await this.userRepo.update(userId, { password: hashedPassword });
+
+    sendEmail({
+      to: user.email,
+      subject: 'Tu contraseña ha sido actualizada con éxito - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de la cuenta</p>
+          </div>
+          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+            Te confirmamos que la contraseña de tu cuenta ha sido actualizada exitosamente desde tu panel de seguridad.
+          </p>
+          <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
+            <p style="margin: 0; font-size: 13px; color: #166534; font-weight: 600;">
+              ✓ Contraseña actualizada mediante verificación de identidad por correo electrónico.
+            </p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #dc2626; margin: 0; line-height: 1.4;">
+            Si no reconoces este cambio o no lo solicitaste tú, por favor comunícate de inmediato con el soporte de Turnos Ya.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error al enviar confirmación de cambio:', err));
+
+    return {
+      message: 'Contraseña actualizada correctamente. Te enviamos un correo con la confirmación.',
+    };
+  }
+
   async confirmPasswordChange(userId: number, confirmationToken: string, code: string) {
     if (!confirmationToken || !code) {
       throw new AppError('El token de confirmación y el código son requeridos', 400);
@@ -220,7 +393,7 @@ export class AuthService {
 
     sendEmail({
       to: user.email,
-      subject: 'Tu contraseña ha sido actualizada - Turnos Ya',
+      subject: 'Tu contraseña ha sido actualizada con éxito - Turnos Ya',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
           <h2 style="color: #009ee3; margin-top: 0;">Turnos Ya</h2>
@@ -320,6 +493,27 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepo.update(user.id, { password: hashedPassword });
+
+    sendEmail({
+      to: user.email,
+      subject: 'Tu contraseña ha sido restablecida con éxito - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de la cuenta</p>
+          </div>
+          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 14px; color: #334155; line-height: 1.6;">
+            Te confirmamos que la contraseña de tu cuenta ha sido restablecida exitosamente. Ya puedes iniciar sesión con tus nuevas credenciales.
+          </p>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #dc2626; margin: 0; line-height: 1.4;">
+            Si no reconoces esta acción, por favor comunícate de inmediato con el soporte de Turnos Ya.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error al enviar confirmación de cambio:', err));
 
     return { message: 'Contraseña actualizada correctamente. Ya podés iniciar sesión con tus nuevas credenciales.' };
   }
