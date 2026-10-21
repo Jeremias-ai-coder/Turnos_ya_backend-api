@@ -20,7 +20,7 @@ const app = express();
 app.use(requestLogger);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({ maxAge: 86400 }));
 app.use(express.json());
 
 // Routes v1
