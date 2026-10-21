@@ -60,7 +60,39 @@ export class AuthController {
     const userId = (req as any).user.id;
     const { currentPassword, newPassword } = req.body;
 
+    if (!currentPassword && !newPassword) {
+      const result = await this.authService.requestPasswordChangeCode(userId);
+      return res.json(result);
+    }
+
     const result = await this.authService.requestPasswordChange(userId, currentPassword, newPassword);
+    res.json(result);
+  };
+
+  requestPasswordChangeCode = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const result = await this.authService.requestPasswordChangeCode(userId);
+    res.json(result);
+  };
+
+  verifyPasswordChangeCode = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { confirmationToken, code } = req.body;
+
+    const result = await this.authService.verifyPasswordChangeCode(userId, confirmationToken, code);
+    res.json(result);
+  };
+
+  submitPasswordChange = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { changeAuthToken, currentPassword, newPassword, skipCurrentPassword } = req.body;
+
+    const result = await this.authService.submitPasswordChange(userId, {
+      changeAuthToken,
+      currentPassword,
+      newPassword,
+      skipCurrentPassword,
+    });
     res.json(result);
   };
 
