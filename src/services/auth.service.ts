@@ -345,13 +345,17 @@ export class AuthService {
     let user = await this.userRepo.findByEmail(email);
 
     if (!user) {
-      // Registrar nuevo usuario desde Google con rol cliente
+      // Registrar nuevo usuario desde Google con rol cliente (pre-verificado)
       const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(-10) + Date.now().toString(), 10);
       user = await this.userRepo.create({
         name: name || email.split('@')[0],
         email,
         password: randomPassword,
+        emailVerified: true,
       });
+    } else if (!(user as any).emailVerified) {
+      // Si el usuario ya existía con registro tradicional, el inicio con Google valida su correo
+      user = await this.userRepo.update(user.id, { emailVerified: true });
     }
 
     const token = jwt.sign(
@@ -366,6 +370,124 @@ export class AuthService {
     };
   }
 
+  async sendVerificationEmail(userId: number) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if ((user as any).emailVerified) {
+      return { message: 'Tu correo electrónico ya se encuentra verificado.', alreadyVerified: true };
+    }
+
+    // Código numérico de 6 dígitos
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Token firmado por 24 horas
+    const verificationToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        code,
+        type: 'VERIFY_EMAIL',
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
+    const verifyUrl = `${frontendUrl}/verify-email?token=${verificationToken}`;
+
+    sendEmail({
+      to: user.email,
+      subject: 'Verifica tu dirección de correo electrónico - Turnos Ya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
+            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Confirmación de correo</p>
+          </div>
+          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
+          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+            Para verificar tu cuenta y asegurar la recepción de avisos y recordatorios de turnos, puedes usar el siguiente código de 6 dígitos en tu perfil:
+          </p>
+          <div style="text-align: center; margin: 24px 0;">
+            <div style="display: inline-block; background: #f0fdf4; border: 2px dashed #00a650; padding: 14px 32px; font-size: 30px; font-weight: 800; letter-spacing: 6px; color: #00a650; border-radius: 10px;">
+              ${code}
+            </div>
+          </div>
+          <div style="text-align: center; margin: 24px 0;">
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">O si lo prefieres, haz clic en el siguiente botón:</p>
+            <a href="${verifyUrl}" style="background-color: #009ee3; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
+              Verificar mi correo ahora
+            </a>
+          </div>
+          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+            Si no solicitaste esta verificación, puedes ignorar este mensaje.
+          </p>
+        </div>
+      `,
+    }).catch(err => console.error('[EMAIL] Error enviando correo de verificación:', err));
+
+    return {
+      message: 'Código de verificación enviado a tu correo.',
+      verificationToken,
+      qaCode: code,
+      verifyUrl,
+    };
+  }
+
+  async verifyEmail(data: { token?: string; code?: string; verificationToken?: string; userId?: number }) {
+    let targetUserId = data.userId;
+
+    if (data.token) {
+      let decoded: any;
+      try {
+        decoded = jwt.verify(data.token, JWT_SECRET);
+      } catch {
+        throw new AppError('El enlace de verificación ha expirado o es inválido', 400);
+      }
+
+      if (decoded.type !== 'VERIFY_EMAIL' || !decoded.userId) {
+        throw new AppError('El token no corresponde a una verificación de correo válida', 400);
+      }
+
+      targetUserId = decoded.userId;
+    } else if (data.code && data.verificationToken) {
+      let decoded: any;
+      try {
+        decoded = jwt.verify(data.verificationToken, JWT_SECRET);
+      } catch {
+        throw new AppError('El código de verificación ha expirado o es inválido', 400);
+      }
+
+      if (decoded.type !== 'VERIFY_EMAIL' || !decoded.userId) {
+        throw new AppError('El token no corresponde a una verificación de correo válida', 400);
+      }
+
+      if (decoded.code !== data.code.trim()) {
+        throw new AppError('El código de verificación ingresado es incorrecto', 400);
+      }
+
+      targetUserId = decoded.userId;
+    } else {
+      throw new AppError('Debes proporcionar un código o un token de verificación', 400);
+    }
+
+    const user = await this.userRepo.findById(targetUserId!);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    const updated = await this.userRepo.update(targetUserId!, { emailVerified: true });
+
+    return {
+      message: '¡Tu correo electrónico ha sido verificado exitosamente!',
+      user: this.sanitizeUser(updated),
+    };
+  }
+
   private sanitizeUser(user: any) {
     return {
       id: user.id,
@@ -373,6 +495,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       phone: user.phone,
+      emailVerified: Boolean(user.emailVerified),
       emailNotifications: user.emailNotifications,
       whatsappNotifications: user.whatsappNotifications,
       createdAt: user.createdAt || null,

@@ -111,6 +111,10 @@ Con esto se valida que funciona el flujo completo.
 - [x] Recuperación de contraseña con enlace seguro directo y token automático
 - [x] Email de bienvenida y confirmación de registro de usuario
 - [x] Confirmación de cambio de contraseña con código de 6 dígitos enviado por email en el panel de perfil
+- [x] Verificación de correo progresiva con banner discreto en cabecera y botón de verificación
+- [x] Panel de verificación interactivo en Perfil con código de 6 dígitos y botón de modo QA
+- [x] Página dedicada y directa `/verify-email?token=...` para validación en 1 clic
+- [x] Auto-verificación de cuentas que inician sesión mediante Google OAuth
 - [x] Confirmar recordatorios de turnos (1 hora antes) con envío de email si `emailNotifications = true`
 - [x] Verificar usuarios con `emailNotifications` y `whatsappNotifications` en perfil
 - [ ] Dejar WhatsApp para una segunda etapa (Meta Business Cloud API / Twilio)
@@ -122,7 +126,13 @@ Con esto se valida que funciona el flujo completo.
 ## 8) Estado actual de las funcionalidades de comunicación
 
 1. **Recuperación de contraseña:** 100% operativo tanto con correo real como con enlace de contingencia / QA en pantalla.
-2. **Registro de usuarios:** Envía automáticamente un correo HTML de bienvenida con enlace a la plataforma.
-3. **Cambio de contraseña desde Perfil:** Solicita contraseña actual, envía código numérico de 6 dígitos al correo del usuario y exige validación antes de actualizar la clave en base de datos.
-4. **Recordatorios de turnos:** El worker en segundo plano detecta turnos a menos de 65 minutos y envía tanto notificación en la aplicación como correo electrónico si el usuario tiene `emailNotifications` activo.
+2. **Registro de usuarios:** Envía automáticamente un correo HTML de bienvenida con enlace a la plataforma sin bloquear el onboarding.
+3. **Verificación de correo electrónico (Progresiva):**
+   - Banner superior informativo si el usuario no tiene el email verificado.
+   - Badge distintivo en el Perfil (`✓ Correo verificado` vs `⚠️ Pendiente de verificación`).
+   - Envío de código de 6 dígitos por email con botón interactivo de verificación en el perfil.
+   - Enlace directo de validación en un clic (`/verify-email?token=...`).
+   - Cuentas de Google OAuth pre-verificadas automáticamente.
+4. **Cambio de contraseña desde Perfil:** Solicita contraseña actual, envía código numérico de 6 dígitos al correo del usuario y exige validación antes de actualizar la clave en base de datos.
+5. **Recordatorios de turnos:** El worker en segundo plano detecta turnos a menos de 65 minutos y envía tanto notificación en la aplicación como correo electrónico si el usuario tiene `emailNotifications` activo.
 

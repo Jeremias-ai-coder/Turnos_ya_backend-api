@@ -14,6 +14,7 @@ model User {
   password              String    @db.VarChar(255)
   role                  Role      @default(client)
   phone                 String?   @db.VarChar(30)
+  emailVerified         Boolean       @default(false) @map("email_verified")
   emailNotifications    Boolean       @default(true) @map("email_notifications")
   whatsappNotifications Boolean       @default(true) @map("whatsapp_notifications")
   deletedAt             DateTime?     @map("deleted_at") @db.Timestamp(0)

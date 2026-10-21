@@ -331,5 +331,46 @@ describe('AuthService (Unit Tests)', () => {
       }));
     });
   });
+
+  describe('sendVerificationEmail & verifyEmail', () => {
+    it('debe enviar código de verificación por email', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 30,
+        name: 'Lucas Test',
+        email: 'lucas@example.com',
+        emailVerified: false,
+      } as any);
+
+      const res = await authService.sendVerificationEmail(30);
+      expect(res.message).toContain('Código de verificación enviado');
+      expect(res.qaCode).toHaveLength(6);
+      expect(res.verificationToken).toBeDefined();
+    });
+
+    it('debe verificar el email exitosamente con el código recibido', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 30,
+        name: 'Lucas Test',
+        email: 'lucas@example.com',
+        emailVerified: false,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({
+        id: 30,
+        name: 'Lucas Test',
+        email: 'lucas@example.com',
+        emailVerified: true,
+      } as any);
+
+      const sendRes = await authService.sendVerificationEmail(30);
+      const verifyRes = await authService.verifyEmail({
+        code: sendRes.qaCode!,
+        verificationToken: sendRes.verificationToken,
+      });
+
+      expect(verifyRes.message).toContain('verificado exitosamente');
+      expect(verifyRes.user.emailVerified).toBe(true);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(30, { emailVerified: true });
+    });
+  });
 });
 

@@ -14,6 +14,7 @@ import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
 import { requestLogger } from './middlewares/requestLogger';
 import { startKeepAlive } from './utils/keepAlive';
+import { ensureDatabaseSchema } from './config/prisma';
 
 const app = express();
 
@@ -54,6 +55,8 @@ app.listen(PORT, '0.0.0.0', () => {
     console.warn('\x1b[33m%s\x1b[0m', '⚠️ ADVERTENCIA DE SEGURIDAD: JWT_SECRET no está configurado o utiliza un valor por defecto inseguro en producción.');
   }
   console.log(`Server is running on 0.0.0.0:${PORT}`);
+  // Asegurar esquema seguro en base de datos
+  ensureDatabaseSchema().catch(console.error);
   // Iniciar tarea periódica de recordatorios de turnos (cada 60 segundos)
   reminderJob.start(60000);
   // Iniciar auto-ping Keep-Alive para Render / QA

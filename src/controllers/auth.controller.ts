@@ -104,4 +104,18 @@ export class AuthController {
     const result = await this.authService.loginWithGoogle(parsed.data);
     res.json(result);
   };
+
+  sendVerificationEmail = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const result = await this.authService.sendVerificationEmail(userId);
+    res.json(result);
+  };
+
+  verifyEmail = async (req: Request, res: Response) => {
+    const userId = (req as any).user?.id;
+    const token = req.body?.token || (req.query?.token as string);
+    const { code, verificationToken } = req.body || {};
+    const result = await this.authService.verifyEmail({ token, code, verificationToken, userId });
+    res.json(result);
+  };
 }
