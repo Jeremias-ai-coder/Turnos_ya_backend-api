@@ -23,10 +23,11 @@ export const resetPasswordSchema = z.object({
 
 export const googleAuthSchema = z.object({
   credential: z.string().optional(),
+  accessToken: z.string().optional(),
   email: z.string().email().optional(),
   name: z.string().optional(),
   googleId: z.string().optional()
-}).refine(data => data.credential || (data.email && data.name), {
-  message: 'Debe enviar una credencial de Google válida o los datos de usuario'
+}).refine(data => data.credential || data.accessToken || (data.email && data.name), {
+  message: 'Debe enviar una credencial o token de acceso de Google válido o los datos de usuario'
 });
 

@@ -518,12 +518,29 @@ export class AuthService {
     return { message: 'Contraseña actualizada correctamente. Ya podés iniciar sesión con tus nuevas credenciales.' };
   }
 
-  async loginWithGoogle(data: { credential?: string; email?: string; name?: string; googleId?: string }) {
+  async loginWithGoogle(data: { credential?: string; accessToken?: string; email?: string; name?: string; googleId?: string }) {
     let email = data.email?.toLowerCase().trim();
     let name = data.name?.trim();
 
-    // Si viene la credencial JWT de Google Identity Services, validarla con la API de Google
-    if (data.credential) {
+    // 1. Si viene el accessToken de Google OAuth 2.0 (flujo select_account)
+    if (data.accessToken) {
+      try {
+        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${data.accessToken}`);
+        if (!googleRes.ok) {
+          throw new Error('Google access token invalid');
+        }
+        const payload: any = await googleRes.json();
+        if (payload.email) {
+          email = payload.email.toLowerCase().trim();
+        }
+      } catch (err) {
+        if (!email) {
+          throw new AppError('Token de acceso de Google inválido o expirado', 401);
+        }
+      }
+    }
+    // 2. Si viene la credencial JWT de Google Identity Services
+    else if (data.credential) {
       try {
         const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${data.credential}`);
         if (!googleRes.ok) {
