@@ -17,6 +17,10 @@ model User {
   emailVerified         Boolean       @default(false) @map("email_verified")
   emailNotifications    Boolean       @default(true) @map("email_notifications")
   whatsappNotifications Boolean       @default(true) @map("whatsapp_notifications")
+  twoFactorEnabled      Boolean       @default(false) @map("two_factor_enabled")
+  twoFactorSecret       String?       @map("two_factor_secret") @db.Text
+  twoFactorBackupCodes  String?       @map("two_factor_backup_codes") @db.Text
+  tempTwoFactorSecret   String?       @map("temp_two_factor_secret") @db.Text
   deletedAt             DateTime?     @map("deleted_at") @db.Timestamp(0)
   businesses            Business[]
   appointments          Appointment[]

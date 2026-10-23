@@ -70,3 +70,67 @@ Este documento detalla el estado actual de las funcionalidades de comunicación,
   - Linter y comprobación de tipos TypeScript (`npm run build`).
   - Suite de pruebas unitarias (`npm test`).
   - Despliegue automático a producción tras merge en la rama `main`.
+
+---
+
+## 🛡️ 4. Hoja de Ruta de Seguridad y Métodos de Verificación (Security Roadmap)
+
+Para garantizar un estándar de ciberseguridad profesional, cada método de verificación debe apoyarse en infraestructura real de base de datos, criptografía y validación backend, sin simular estados en frontend:
+
+### 1. Contraseña (Estado: 100% Implementado y Operativo)
+- **Base de datos:** Campo `users.password` (hash con `bcrypt`).
+- **Seguridad:**
+  - Recuperación de clave vía email con token temporal firmado de un solo uso.
+  - Cambio de clave desde Perfil protegido mediante 2FA obligatorio por correo electrónico (código de 6 dígitos despachado vía SMTP de Gmail).
+- **Próximas mejoras:** Política de complejidad configurable (mínimo 8 caracteres, mayúsculas, números y símbolos) y verificación contra listas de contraseñas vulneradas (HaveIBeenPwned API).
+
+### 2. Correo Electrónico (Estado: 100% Implementado y Operativo)
+- **Base de datos:** Campo `users.email` y booleano `users.email_verified`.
+- **Seguridad:**
+  - Código numérico OTP de 6 dígitos con expiración de 15 minutos almacenado en memoria/cache.
+  - Enlace de verificación en un clic `/verify-email?token=...`.
+  - Auto-verificación de identidad al iniciar sesión mediante Google OAuth 2.0.
+
+### 3. Teléfono de Contacto y Recuperación (Estado: Próximo Paso)
+- **Base de datos actual:** Campo `users.phone` en tabla `users`.
+- **Plan de implementación:**
+  - Validación de formato internacional estándar E.164 (`+54 9 ...`).
+  - Tabla `phone_verifications` (`phone`, `code`, `expires_at`, `attempts`).
+  - Integración de despacho de código OTP vía SMS (Twilio / AWS SNS) o WhatsApp (Meta Cloud API).
+  - Marcado booleano `phone_verified` en tabla `users`.
+
+### 4. Doble Factor de Autenticación con Google Authenticator / TOTP (Estado: Planificado)
+- **Base de datos requerida:**
+  - `two_factor_secret` (clave secreta Base32 cifrada con AES-256 en reposo).
+  - `two_factor_enabled` (booleano).
+  - `two_factor_backup_codes` (JSON con hashes de 8 códigos de recuperación de un solo uso).
+- **Plan de implementación:**
+  - Librería estándar: `otplib` + `qrcode`.
+  - Endpoint `POST /auth/2fa/generate`: Genera secreto y código QR en base64 (`otpauth://...`).
+  - Endpoint `POST /auth/2fa/enable`: Valida código de 6 dígitos ingresado por el usuario antes de activar.
+  - Modificación del middleware de Login: si `two_factor_enabled === true`, responder con `206 Partial Content` requiriendo el token TOTP para emitir el JWT final.
+
+### 5. Dispositivos Vinculados y Sesiones Concurrentes (Estado: Planificado)
+- **Base de datos requerida:**
+  - Tabla `user_sessions` (`id`, `user_id`, `refresh_token_hash`, `device_name`, `user_agent`, `ip_address`, `location_city`, `last_active_at`, `expires_at`, `revoked_at`).
+- **Plan de implementación:**
+  - Migración a arquitectura de Refresh Tokens rotativos con cookies `HttpOnly` y `SameSite=Lax`.
+  - Endpoint `GET /auth/sessions`: Lista dispositivos con sesión abierta.
+  - Endpoint `DELETE /auth/sessions/:id`: Revocación remota de sesión individual.
+  - Endpoint `POST /auth/sessions/revoke-all`: Cierre de todas las demás sesiones excepto la actual.
+
+### 6. Llaves de Acceso (Passkeys) y Biometría Facial/Dactilar (FIDO2 / WebAuthn) (Estado: Planificado)
+- **Base de datos requerida:**
+  - Tabla `user_authenticators` (`id`, `user_id`, `credential_id`, `public_key`, `counter`, `transports`, `created_at`).
+- **Plan de implementación:**
+  - Librería backend: `@simplewebauthn/server`.
+  - Librería frontend: `@simplewebauthn/browser`.
+  - Permite acceso sin contraseña usando Windows Hello, Face ID, Touch ID o YubiKey mediante criptografía asimétrica de curva elíptica.
+
+### 7. Código QR de Check-in para Asistencia a Turnos (Estado: Planificado)
+- **Base de datos requerida:**
+  - Campo `checkin_token` firmado por turno o por usuario (`appointments.checkin_token`).
+- **Plan de implementación:**
+  - Generación de código QR dinámico con HMAC temporal para evitar capturas de pantalla reutilizadas.
+  - Escaneo en recepción del comercio desde la cámara del smartphone del recepcionista para cambiar estado a `ATTENDED` en tiempo real.
+
