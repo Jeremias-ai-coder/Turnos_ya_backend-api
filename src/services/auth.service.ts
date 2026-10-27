@@ -1,8 +1,12 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { generateSecret, generateURI, verify } from 'otplib';
+import QRCode from 'qrcode';
+import crypto from 'crypto';
 import { IUserRepository, CreateUserDTO, UpdateUserDTO } from '../interfaces/user.interface';
 import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
+import { encryptSecret, decryptSecret } from '../utils/crypto';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
@@ -70,6 +74,21 @@ export class AuthService {
     const isValid = await bcrypt.compare(data.password, user.password);
     if (!isValid) {
       throw new AppError('Credenciales incorrectas', 401);
+    }
+
+    // Si el usuario tiene 2FA habilitado, exigimos el segundo factor
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      const tempToken = jwt.sign(
+        { userId: user.id, scope: '2fa_pending' },
+        JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+
+      return {
+        require2FA: true,
+        tempToken,
+        message: 'Se requiere código de autenticación en dos pasos (Google Authenticator)',
+      };
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
@@ -707,6 +726,203 @@ export class AuthService {
     };
   }
 
+  /**
+   * 2FA: Iniciar configuración generando clave secreta y código QR
+   */
+  async setupTwoFactor(userId: number) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    const secret = generateSecret();
+    const serviceName = 'Turnos Ya';
+    const otpauthUrl = generateURI({
+      issuer: serviceName,
+      label: user.email,
+      secret,
+    });
+    const qrCode = await QRCode.toDataURL(otpauthUrl);
+    const encryptedSecret = encryptSecret(secret);
+
+    await this.userRepo.update(userId, {
+      tempTwoFactorSecret: encryptedSecret,
+    });
+
+    return {
+      secret,
+      qrCode,
+      message: 'Escaneá el código QR en tu app Google Authenticator o ingresá la clave secreta manualmente.',
+    };
+  }
+
+  /**
+   * 2FA: Confirmar activación validando el código de 6 dígitos
+   */
+  async verifyAndEnableTwoFactor(userId: number, code: string) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!user.tempTwoFactorSecret) {
+      throw new AppError('No hay ninguna configuración de 2FA pendiente. Generá un nuevo código QR.', 400);
+    }
+
+    const cleanCode = (code || '').replace(/\s+/g, '');
+    const plainSecret = decryptSecret(user.tempTwoFactorSecret);
+    const verification = await verify({
+      secret: plainSecret,
+      token: cleanCode,
+      epochTolerance: 30,
+    });
+
+    if (!verification.valid) {
+      throw new AppError('Código de verificación incorrecto o expirado. Verificá que la hora de tu celular esté sincronizada en automático e intentá de nuevo.', 400);
+    }
+
+    // Generar 8 códigos de respaldo únicos
+    const backupCodes: string[] = [];
+    for (let i = 0; i < 8; i++) {
+      backupCodes.push(crypto.randomBytes(4).toString('hex').toUpperCase());
+    }
+
+    const encryptedBackupCodes = encryptSecret(JSON.stringify(backupCodes));
+
+    const updatedUser = await this.userRepo.update(userId, {
+      twoFactorEnabled: true,
+      twoFactorSecret: user.tempTwoFactorSecret,
+      twoFactorBackupCodes: encryptedBackupCodes,
+      tempTwoFactorSecret: null,
+    });
+
+    return {
+      success: true,
+      message: '¡Google Authenticator activado con éxito! Tu cuenta cuenta con doble factor de autenticación.',
+      backupCodes,
+      user: this.sanitizeUser(updatedUser),
+    };
+  }
+
+  /**
+   * 2FA: Desactivar con contraseña o código
+   */
+  async disableTwoFactor(userId: number, password?: string, code?: string) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new AppError('El doble factor de autenticación no está activo.', 400);
+    }
+
+    if (password) {
+      const isAuthorized = await bcrypt.compare(password, user.password);
+      if (!isAuthorized) {
+        throw new AppError('Contraseña incorrecta', 400);
+      }
+    } else if (code) {
+      const cleanCode = (code || '').replace(/\s+/g, '');
+      const plainSecret = decryptSecret(user.twoFactorSecret);
+      const verification = await verify({
+        secret: plainSecret,
+        token: cleanCode,
+        epochTolerance: 30,
+      });
+      if (!verification.valid) {
+        throw new AppError('Código de verificación incorrecto', 400);
+      }
+    } else {
+      throw new AppError('Debes ingresar tu contraseña actual o un código de tu app para desactivar 2FA', 400);
+    }
+
+    const updatedUser = await this.userRepo.update(userId, {
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
+      twoFactorBackupCodes: null,
+      tempTwoFactorSecret: null,
+    });
+
+    return {
+      success: true,
+      message: 'El doble factor de autenticación ha sido desactivado.',
+      user: this.sanitizeUser(updatedUser),
+    };
+  }
+
+  /**
+   * 2FA: Validación en flujo de inicio de sesión
+   */
+  async verifyTwoFactorLogin(tempToken: string, code: string) {
+    if (!tempToken || !code) {
+      throw new AppError('Datos incompletos', 400);
+    }
+
+    let decoded: any;
+    try {
+      decoded = jwt.verify(tempToken, JWT_SECRET);
+    } catch {
+      throw new AppError('La sesión de verificación ha expirado. Por favor iniciá sesión nuevamente.', 401);
+    }
+
+    if (decoded.scope !== '2fa_pending' || !decoded.userId) {
+      throw new AppError('Token de verificación inválido', 401);
+    }
+
+    const user = await this.userRepo.findById(decoded.userId);
+    if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new AppError('Configuración de 2FA no encontrada', 400);
+    }
+
+    const cleanCode = (code || '').replace(/\s+/g, '').toUpperCase();
+    const plainSecret = decryptSecret(user.twoFactorSecret);
+    let isValid = false;
+
+    // 1. Si son 6 dígitos numéricos, validar con TOTP (RFC 6238)
+    if (/^\d{6}$/.test(cleanCode)) {
+      try {
+        const verification = await verify({
+          secret: plainSecret,
+          token: cleanCode,
+          epochTolerance: 30,
+        });
+        isValid = Boolean(verification.valid);
+      } catch (totpErr) {
+        console.warn('Fallo en cálculo TOTP:', totpErr);
+      }
+    }
+
+    // 2. Si no fue validado como TOTP y el usuario tiene códigos de respaldo, verificar si coincide con uno
+    if (!isValid && user.twoFactorBackupCodes) {
+      try {
+        const backupCodes: string[] = JSON.parse(decryptSecret(user.twoFactorBackupCodes));
+        const index = backupCodes.indexOf(cleanCode);
+        if (index !== -1) {
+          // Consumir el código de respaldo de un solo uso
+          backupCodes.splice(index, 1);
+          await this.userRepo.update(user.id, {
+            twoFactorBackupCodes: encryptSecret(JSON.stringify(backupCodes)),
+          });
+          isValid = true;
+        }
+      } catch (err) {
+        console.error('Error procesando códigos de respaldo:', err);
+      }
+    }
+
+    if (!isValid) {
+      throw new AppError('Código de verificación o de respaldo incorrecto', 400);
+    }
+
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+
+    return {
+      token,
+      user: this.sanitizeUser(user),
+    };
+  }
+
   private sanitizeUser(user: any) {
     return {
       id: user.id,
@@ -717,6 +933,7 @@ export class AuthService {
       emailVerified: Boolean(user.emailVerified),
       emailNotifications: user.emailNotifications,
       whatsappNotifications: user.whatsappNotifications,
+      twoFactorEnabled: Boolean(user.twoFactorEnabled),
       createdAt: user.createdAt || null,
       deletedAt: user.deletedAt || null
     };

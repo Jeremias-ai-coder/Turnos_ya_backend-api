@@ -21,4 +21,11 @@ router.post('/verify-email', authController.verifyEmail);
 router.get('/verify-email', authController.verifyEmail);
 router.patch('/change-password', authGuard, authController.changePassword);
 
+// Métodos de 2FA (Google Authenticator)
+router.get('/2fa/setup', authGuard, authController.setupTwoFactor);
+router.post('/2fa/setup', authGuard, authController.setupTwoFactor);
+router.post('/2fa/verify-and-enable', authGuard, authController.verifyAndEnableTwoFactor);
+router.post('/2fa/disable', authGuard, authController.disableTwoFactor);
+router.post('/2fa/login-verify', authController.verifyTwoFactorLogin);
+
 export default router;

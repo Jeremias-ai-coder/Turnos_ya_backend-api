@@ -150,4 +150,36 @@ export class AuthController {
     const result = await this.authService.verifyEmail({ token, code, verificationToken, userId });
     res.json(result);
   };
+
+  setupTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const result = await this.authService.setupTwoFactor(userId);
+    res.json(result);
+  };
+
+  verifyAndEnableTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError('El código de 6 dígitos es requerido', 400);
+    }
+    const result = await this.authService.verifyAndEnableTwoFactor(userId, code);
+    res.json(result);
+  };
+
+  disableTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { password, code } = req.body;
+    const result = await this.authService.disableTwoFactor(userId, password, code);
+    res.json(result);
+  };
+
+  verifyTwoFactorLogin = async (req: Request, res: Response) => {
+    const { tempToken, code } = req.body;
+    if (!tempToken || !code) {
+      throw new AppError('Token temporal y código requeridos', 400);
+    }
+    const result = await this.authService.verifyTwoFactorLogin(tempToken, code);
+    res.json(result);
+  };
 }
