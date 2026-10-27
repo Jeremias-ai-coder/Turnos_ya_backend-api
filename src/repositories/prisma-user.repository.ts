@@ -42,9 +42,33 @@ export class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  async findAll(): Promise<Array<Pick<User, 'id' | 'name' | 'email' | 'role' | 'phone'>>> {
+  async findAll(): Promise<any[]> {
     return this.prisma.user.findMany({
-      select: { id: true, name: true, email: true, role: true, phone: true }
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        emailVerified: true,
+        businesses: {
+          select: {
+            id: true,
+            name: true,
+            category: true,
+            phone: true,
+            address: true,
+          }
+        },
+        _count: {
+          select: {
+            businesses: true,
+            appointments: true,
+          }
+        }
+      },
+      orderBy: { id: 'desc' }
     });
   }
 

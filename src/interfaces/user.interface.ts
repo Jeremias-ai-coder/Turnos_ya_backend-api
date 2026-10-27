@@ -29,6 +29,6 @@ export interface IUserRepository {
   create(data: CreateUserDTO): Promise<User>;
   update(id: number, data: UpdateUserDTO): Promise<User>;
   delete(id: number): Promise<User>;
-  findAll(): Promise<Array<Pick<User, 'id' | 'name' | 'email' | 'role' | 'phone'>>>;
+  findAll(): Promise<any[]>;
   count(role?: Role): Promise<number>;
 }
