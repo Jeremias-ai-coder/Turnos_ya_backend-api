@@ -1,3 +1,4 @@
+import { Router } from 'express';
 import { adminController, bugReportController } from '../container';
 import { authGuard } from '../middlewares/authGuard';
 import { AppError } from '../middlewares/errorHandler';
