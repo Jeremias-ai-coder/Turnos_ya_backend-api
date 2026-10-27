@@ -112,7 +112,7 @@ describe('AuthService (Unit Tests)', () => {
 
       mockUserRepo.findByEmail.mockResolvedValue(fakeUser as any);
 
-      const result = await authService.login({
+      const result: any = await authService.login({
         email: 'juan@example.com',
         password: rawPassword,
       });

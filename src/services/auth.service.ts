@@ -7,13 +7,52 @@ import { IUserRepository, CreateUserDTO, UpdateUserDTO } from '../interfaces/use
 import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
+import { prisma } from '../config/prisma';
+import { parseDeviceName } from '../utils/deviceDetector';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
 export class AuthService {
   constructor(private userRepo: IUserRepository) {}
 
-  async register(data: { name: string; email: string; password: string }) {
+  /**
+   * Registra una sesión persistente y emite el JWT con sessionId
+   */
+  private async createSessionAndToken(
+    user: any,
+    meta?: { userAgent?: string; ipAddress?: string; deviceName?: string },
+    expiresIn = '1d'
+  ): Promise<string> {
+    const detectedName = meta?.deviceName || parseDeviceName(meta?.userAgent);
+    let sessionId: string | undefined;
+
+    try {
+      const session = await prisma.userSession.create({
+        data: {
+          userId: user.id,
+          deviceName: detectedName,
+          userAgent: meta?.userAgent || null,
+          ipAddress: meta?.ipAddress || null,
+        },
+      });
+      sessionId = session.id;
+    } catch (err) {
+      console.warn('[AUTH] No se pudo guardar la sesión en BD:', err);
+    }
+
+    const payload: any = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    };
+    if (sessionId) {
+      payload.sessionId = sessionId;
+    }
+
+    return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn as any });
+  }
+
+  async register(data: { name: string; email: string; password: string }, meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }) {
     const existingUser = await this.userRepo.findByEmail(data.email);
     if (existingUser) {
       throw new AppError('El email ya está en uso', 400);
@@ -26,7 +65,7 @@ export class AuthService {
       password: hashedPassword
     });
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    const token = await this.createSessionAndToken(user, meta, '1d');
 
     // Enviar correo de bienvenida y confirmación de registro
     const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
@@ -65,7 +104,7 @@ export class AuthService {
     };
   }
 
-  async login(data: { email: string; password: string }) {
+  async login(data: { email: string; password: string }, meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }) {
     const user = await this.userRepo.findByEmail(data.email);
     if (!user) {
       throw new AppError('Credenciales incorrectas', 401);
@@ -91,7 +130,7 @@ export class AuthService {
       };
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    const token = await this.createSessionAndToken(user, meta, '1d');
 
     return {
       token,
@@ -537,7 +576,10 @@ export class AuthService {
     return { message: 'Contraseña actualizada correctamente. Ya podés iniciar sesión con tus nuevas credenciales.' };
   }
 
-  async loginWithGoogle(data: { credential?: string; accessToken?: string; email?: string; name?: string; googleId?: string }) {
+  async loginWithGoogle(
+    data: { credential?: string; accessToken?: string; email?: string; name?: string; googleId?: string },
+    meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }
+  ) {
     let email = data.email?.toLowerCase().trim();
     let name = data.name?.trim();
 
@@ -596,11 +638,7 @@ export class AuthService {
       user = await this.userRepo.update(user.id, { emailVerified: true });
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '30d' }
-    );
+    const token = await this.createSessionAndToken(user, meta, '30d');
 
     return {
       token,
@@ -854,7 +892,11 @@ export class AuthService {
   /**
    * 2FA: Validación en flujo de inicio de sesión
    */
-  async verifyTwoFactorLogin(tempToken: string, code: string) {
+  async verifyTwoFactorLogin(
+    tempToken: string,
+    code: string,
+    meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }
+  ) {
     if (!tempToken || !code) {
       throw new AppError('Datos incompletos', 400);
     }
@@ -915,7 +957,7 @@ export class AuthService {
       throw new AppError('Código de verificación o de respaldo incorrecto', 400);
     }
 
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '1d' });
+    const token = await this.createSessionAndToken(user, meta, '1d');
 
     return {
       token,
@@ -937,6 +979,64 @@ export class AuthService {
       createdAt: user.createdAt || null,
       deletedAt: user.deletedAt || null
     };
+  }
+
+  /**
+   * Obtiene la lista de sesiones activas del usuario
+   */
+  async getActiveSessions(userId: number, currentSessionId?: string) {
+    const sessions = await prisma.userSession.findMany({
+      where: {
+        userId,
+        revokedAt: null,
+      },
+      orderBy: { lastActiveAt: 'desc' },
+    });
+
+    return sessions.map((s) => ({
+      id: s.id,
+      deviceName: s.deviceName,
+      ipAddress: s.ipAddress,
+      lastActiveAt: s.lastActiveAt,
+      createdAt: s.createdAt,
+      isCurrent: Boolean(currentSessionId && s.id === currentSessionId),
+    }));
+  }
+
+  /**
+   * Revoca una sesión puntual
+   */
+  async revokeSession(userId: number, sessionId: string) {
+    const session = await prisma.userSession.findFirst({
+      where: { id: sessionId, userId, revokedAt: null },
+    });
+
+    if (!session) {
+      throw new AppError('Sesión no encontrada o ya finalizada', 404);
+    }
+
+    await prisma.userSession.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
+    });
+
+    return { message: 'Sesión cerrada correctamente.' };
+  }
+
+  /**
+   * Cierra todas las demás sesiones excepto la actual
+   */
+  async revokeAllOtherSessions(userId: number, currentSessionId?: string) {
+    await prisma.userSession.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        ...(currentSessionId ? { id: { not: currentSessionId } } : {}),
+      },
+      data: { revokedAt: new Date() },
+    });
+
+    return { message: 'Todas las demás sesiones fueron cerradas con éxito.' };
   }
 }
 

@@ -91,33 +91,33 @@ Para garantizar un estándar de ciberseguridad profesional, cada método de veri
   - Enlace de verificación en un clic `/verify-email?token=...`.
   - Auto-verificación de identidad al iniciar sesión mediante Google OAuth 2.0.
 
-### 3. Teléfono de Contacto y Recuperación (Estado: Próximo Paso)
+### 3. Teléfono de Contacto y Recuperación (Estado: En espera por tiempo indeterminado)
 - **Base de datos actual:** Campo `users.phone` en tabla `users`.
-- **Plan de implementación:**
-  - Validación de formato internacional estándar E.164 (`+54 9 ...`).
-  - Tabla `phone_verifications` (`phone`, `code`, `expires_at`, `attempts`).
-  - Integración de despacho de código OTP vía SMS (Twilio / AWS SNS) o WhatsApp (Meta Cloud API).
-  - Marcado booleano `phone_verified` en tabla `users`.
+- **Estado:** Se mantiene como dato informativo opcional del perfil sin bloqueo ni verificación forzosa por SMS o WhatsApp, postergando la adquisición de línea corporativa y proveedor de mensajería para más adelante.
 
-### 4. Doble Factor de Autenticación con Google Authenticator / TOTP (Estado: Planificado)
-- **Base de datos requerida:**
+### 4. Doble Factor de Autenticación con Google Authenticator / TOTP (Estado: 100% Implementado y Operativo)
+- **Base de datos:**
   - `two_factor_secret` (clave secreta Base32 cifrada con AES-256 en reposo).
   - `two_factor_enabled` (booleano).
-  - `two_factor_backup_codes` (JSON con hashes de 8 códigos de recuperación de un solo uso).
-- **Plan de implementación:**
-  - Librería estándar: `otplib` + `qrcode`.
-  - Endpoint `POST /auth/2fa/generate`: Genera secreto y código QR en base64 (`otpauth://...`).
-  - Endpoint `POST /auth/2fa/enable`: Valida código de 6 dígitos ingresado por el usuario antes de activar.
-  - Modificación del middleware de Login: si `two_factor_enabled === true`, responder con `206 Partial Content` requiriendo el token TOTP para emitir el JWT final.
+  - `two_factor_backup_codes` (códigos de respaldo criptográficos cifrados).
+  - `temp_two_factor_secret` (clave temporal de enrolamiento).
+- **Implementación:**
+  - Backend: `@otplib` + `qrcode` + AES-256. Endpoints `/api/v1/auth/2fa/setup`, `/verify-and-enable`, `/disable`, `/login-verify`.
+  - Frontend Web: Modal de configuración con escaneo QR y confirmación, soporte en login escalonado.
+  - Frontend Mobile: Soporte de segundo paso en `LoginScreen.tsx` e indicador de estado de seguridad en `ProfileScreen.tsx`.
 
-### 5. Dispositivos Vinculados y Sesiones Concurrentes (Estado: Planificado)
-- **Base de datos requerida:**
-  - Tabla `user_sessions` (`id`, `user_id`, `refresh_token_hash`, `device_name`, `user_agent`, `ip_address`, `location_city`, `last_active_at`, `expires_at`, `revoked_at`).
-- **Plan de implementación:**
-  - Migración a arquitectura de Refresh Tokens rotativos con cookies `HttpOnly` y `SameSite=Lax`.
-  - Endpoint `GET /auth/sessions`: Lista dispositivos con sesión abierta.
-  - Endpoint `DELETE /auth/sessions/:id`: Revocación remota de sesión individual.
-  - Endpoint `POST /auth/sessions/revoke-all`: Cierre de todas las demás sesiones excepto la actual.
+### 5. Dispositivos Vinculados y Sesiones Concurrentes (Estado: 100% Implementado y Operativo)
+- **Base de datos:**
+  - Tabla `user_sessions` (`id`, `user_id`, `device_name`, `user_agent`, `ip_address`, `last_active_at`, `created_at`, `revoked_at`).
+- **Implementación:**
+  - Inyección de `sessionId` en el JWT emitido tras el login (con fallback seguro en caso de contingencia).
+  - Detección automática y amigable de navegador y sistema operativo (`parseDeviceName`).
+  - Verificación en middleware `authGuard` para detectar sesiones revocadas a distancia.
+  - Endpoints:
+    - `GET /api/v1/auth/sessions`: Lista dispositivos con sesión activa e indicador `isCurrent`.
+    - `DELETE /api/v1/auth/sessions/:id`: Revocación remota de una sesión puntual.
+    - `POST /api/v1/auth/sessions/revoke-all`: Cierre de todas las demás sesiones excepto la actual.
+  - Frontend Web: Renderizado dinámico en tiempo real en la pestaña *Dispositivos vinculados* con badges y botones de revocación individual y masiva.
 
 ### 6. Llaves de Acceso (Passkeys) y Biometría Facial/Dactilar (FIDO2 / WebAuthn) (Estado: Planificado)
 - **Base de datos requerida:**

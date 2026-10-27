@@ -25,6 +25,7 @@ model User {
   businesses            Business[]
   appointments          Appointment[]
   notifications         Notification[]
+  sessions              UserSession[]
 
   @@map("users")
 }
@@ -165,5 +166,21 @@ enum AppointmentStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+model UserSession {
+  id           String    @id @default(uuid())
+  userId       Int       @map("user_id")
+  deviceName   String    @map("device_name") @db.VarChar(150)
+  userAgent    String?   @map("user_agent") @db.Text
+  ipAddress    String?   @map("ip_address") @db.VarChar(60)
+  lastActiveAt DateTime  @default(now()) @map("last_active_at") @db.Timestamp(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamp(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
 }
 

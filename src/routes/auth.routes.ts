@@ -28,4 +28,9 @@ router.post('/2fa/verify-and-enable', authGuard, authController.verifyAndEnableT
 router.post('/2fa/disable', authGuard, authController.disableTwoFactor);
 router.post('/2fa/login-verify', authController.verifyTwoFactorLogin);
 
+// Métodos de Gestión de Dispositivos y Sesiones
+router.get('/sessions', authGuard, authController.getSessions);
+router.delete('/sessions/:id', authGuard, authController.revokeSession);
+router.post('/sessions/revoke-all', authGuard, authController.revokeAllOtherSessions);
+
 export default router;
