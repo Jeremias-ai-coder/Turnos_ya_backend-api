@@ -8,6 +8,7 @@ import { PrismaUserRepository } from './repositories/prisma-user.repository';
 import { PrismaScheduleRepository } from './repositories/prisma-schedule.repository';
 import { PrismaReviewRepository } from './repositories/prisma-review.repository';
 import { PrismaNotificationRepository } from './repositories/prisma-notification.repository';
+import { PrismaBugReportRepository } from './repositories/prisma-bug-report.repository';
 
 // Servicios
 import { ServiceService } from './services/service.service';
@@ -19,6 +20,7 @@ import { AdminService } from './services/admin.service';
 import { ReviewService } from './services/review.service';
 import { NotificationService } from './services/notification.service';
 import { CategoryService } from './services/category.service';
+import { BugReportService } from './services/bug-report.service';
 import { ReminderJob } from './infrastructure/reminder.job';
 
 // Controladores
@@ -31,6 +33,7 @@ import { AdminController } from './controllers/admin.controller';
 import { ReviewController } from './controllers/review.controller';
 import { NotificationController } from './controllers/notification.controller';
 import { CategoryController } from './controllers/category.controller';
+import { BugReportController } from './controllers/bug-report.controller';
 
 // 1. Instanciación de Repositorios (Inyección de Prisma Client)
 export const serviceRepository = new PrismaServiceRepository(prisma);
@@ -40,6 +43,7 @@ export const userRepository = new PrismaUserRepository(prisma);
 export const scheduleRepository = new PrismaScheduleRepository(prisma);
 export const reviewRepository = new PrismaReviewRepository(prisma);
 export const notificationRepository = new PrismaNotificationRepository(prisma);
+export const bugReportRepository = new PrismaBugReportRepository(prisma);
 
 // 2. Instanciación de Servicios (Inyección de Repositorios)
 export const notificationService = new NotificationService(notificationRepository, prisma);
@@ -51,6 +55,7 @@ export const scheduleService = new ScheduleService(scheduleRepository, businessR
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository);
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository);
 export const categoryService = new CategoryService(prisma);
+export const bugReportService = new BugReportService(bugReportRepository);
 
 // Tareas en segundo plano (Scheduler)
 export const reminderJob = new ReminderJob(notificationService);
@@ -65,4 +70,5 @@ export const adminController = new AdminController(adminService);
 export const reviewController = new ReviewController(reviewService);
 export const notificationController = new NotificationController(notificationService);
 export const categoryController = new CategoryController(categoryService);
+export const bugReportController = new BugReportController(bugReportService);
 
