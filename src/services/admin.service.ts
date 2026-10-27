@@ -18,8 +18,15 @@ export class AdminService {
   }
 
   async updateUserRole(id: number, role: string) {
-    if (!['client', 'owner', 'administrator'].includes(role)) {
-      throw new AppError('Rol inválido', 400);
+    if (role === 'administrator') {
+      throw new AppError('Por motivos de seguridad, el rol de Administrador no puede ser asignado desde el panel', 403);
+    }
+    if (!['client', 'owner'].includes(role)) {
+      throw new AppError('Rol inválido. Sólo se puede alternar entre Cliente y Dueño', 400);
+    }
+    const targetUser = await this.userRepo.findById(id);
+    if (targetUser?.role === 'administrator') {
+      throw new AppError('El rol de un Administrador del Sistema está protegido y no puede ser modificado', 403);
     }
     const user = await this.userRepo.update(id, { role: role as Role });
     return { id: user.id, name: user.name, role: user.role };
