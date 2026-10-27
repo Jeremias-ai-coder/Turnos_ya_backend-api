@@ -26,6 +26,7 @@ model User {
   appointments          Appointment[]
   notifications         Notification[]
   sessions              UserSession[]
+  bugReports            BugReport[]
 
   @@map("users")
 }
@@ -182,5 +183,31 @@ model UserSession {
 
   @@index([userId])
   @@map("user_sessions")
+}
+
+model BugReport {
+  id          Int             @id @default(autoincrement())
+  userId      Int             @map("user_id")
+  section     String          @db.VarChar(100)
+  summary     String          @db.VarChar(255)
+  steps       String          @db.Text
+  deviceInfo  String?         @map("device_info") @db.VarChar(255)
+  pageUrl     String?         @map("page_url") @db.VarChar(255)
+  status      BugReportStatus @default(PENDING)
+  adminNotes  String?         @map("admin_notes") @db.Text
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("bug_reports")
+}
+
+enum BugReportStatus {
+  PENDING
+  IN_REVIEW
+  RESOLVED
+  DISCARDED
 }
 

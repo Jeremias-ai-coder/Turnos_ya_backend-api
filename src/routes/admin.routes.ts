@@ -1,5 +1,4 @@
-import { Router } from 'express';
-import { adminController } from '../container';
+import { adminController, bugReportController } from '../container';
 import { authGuard } from '../middlewares/authGuard';
 import { AppError } from '../middlewares/errorHandler';
 
@@ -26,5 +25,11 @@ router.get('/stats', authGuard, requireAdmin, adminController.getStats);
 
 // GET /api/v1/admin/appointments — Todos los turnos del sistema
 router.get('/appointments', authGuard, requireAdmin, adminController.getAllAppointments);
+
+// GET /api/v1/admin/reports — Listar reportes de errores (admin only)
+router.get('/reports', authGuard, requireAdmin, bugReportController.getAdminBugReports);
+
+// PATCH /api/v1/admin/reports/:id/status — Actualizar estado del reporte (admin only)
+router.patch('/reports/:id/status', authGuard, requireAdmin, bugReportController.updateBugReportStatus);
 
 export default router;
