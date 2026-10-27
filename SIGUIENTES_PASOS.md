@@ -70,3 +70,67 @@ Este documento detalla el estado actual de las funcionalidades de comunicación,
   - Linter y comprobación de tipos TypeScript (`npm run build`).
   - Suite de pruebas unitarias (`npm test`).
   - Despliegue automático a producción tras merge en la rama `main`.
+
+---
+
+## 🛡️ 4. Hoja de Ruta de Seguridad y Métodos de Verificación (Security Roadmap)
+
+Para garantizar un estándar de ciberseguridad profesional, cada método de verificación debe apoyarse en infraestructura real de base de datos, criptografía y validación backend, sin simular estados en frontend:
+
+### 1. Contraseña (Estado: 100% Implementado y Operativo)
+- **Base de datos:** Campo `users.password` (hash con `bcrypt`).
+- **Seguridad:**
+  - Recuperación de clave vía email con token temporal firmado de un solo uso.
+  - Cambio de clave desde Perfil protegido mediante 2FA obligatorio por correo electrónico (código de 6 dígitos despachado vía SMTP de Gmail).
+- **Próximas mejoras:** Política de complejidad configurable (mínimo 8 caracteres, mayúsculas, números y símbolos) y verificación contra listas de contraseñas vulneradas (HaveIBeenPwned API).
+
+### 2. Correo Electrónico (Estado: 100% Implementado y Operativo)
+- **Base de datos:** Campo `users.email` y booleano `users.email_verified`.
+- **Seguridad:**
+  - Código numérico OTP de 6 dígitos con expiración de 15 minutos almacenado en memoria/cache.
+  - Enlace de verificación en un clic `/verify-email?token=...`.
+  - Auto-verificación de identidad al iniciar sesión mediante Google OAuth 2.0.
+
+### 3. Teléfono de Contacto y Recuperación (Estado: En espera por tiempo indeterminado)
+- **Base de datos actual:** Campo `users.phone` en tabla `users`.
+- **Estado:** Se mantiene como dato informativo opcional del perfil sin bloqueo ni verificación forzosa por SMS o WhatsApp, postergando la adquisición de línea corporativa y proveedor de mensajería para más adelante.
+
+### 4. Doble Factor de Autenticación con Google Authenticator / TOTP (Estado: 100% Implementado y Operativo)
+- **Base de datos:**
+  - `two_factor_secret` (clave secreta Base32 cifrada con AES-256 en reposo).
+  - `two_factor_enabled` (booleano).
+  - `two_factor_backup_codes` (códigos de respaldo criptográficos cifrados).
+  - `temp_two_factor_secret` (clave temporal de enrolamiento).
+- **Implementación:**
+  - Backend: `@otplib` + `qrcode` + AES-256. Endpoints `/api/v1/auth/2fa/setup`, `/verify-and-enable`, `/disable`, `/login-verify`.
+  - Frontend Web: Modal de configuración con escaneo QR y confirmación, soporte en login escalonado.
+  - Frontend Mobile: Soporte de segundo paso en `LoginScreen.tsx` e indicador de estado de seguridad en `ProfileScreen.tsx`.
+
+### 5. Dispositivos Vinculados y Sesiones Concurrentes (Estado: 100% Implementado y Operativo)
+- **Base de datos:**
+  - Tabla `user_sessions` (`id`, `user_id`, `device_name`, `user_agent`, `ip_address`, `last_active_at`, `created_at`, `revoked_at`).
+- **Implementación:**
+  - Inyección de `sessionId` en el JWT emitido tras el login (con fallback seguro en caso de contingencia).
+  - Detección automática y amigable de navegador y sistema operativo (`parseDeviceName`).
+  - Verificación en middleware `authGuard` para detectar sesiones revocadas a distancia.
+  - Endpoints:
+    - `GET /api/v1/auth/sessions`: Lista dispositivos con sesión activa e indicador `isCurrent`.
+    - `DELETE /api/v1/auth/sessions/:id`: Revocación remota de una sesión puntual.
+    - `POST /api/v1/auth/sessions/revoke-all`: Cierre de todas las demás sesiones excepto la actual.
+  - Frontend Web: Renderizado dinámico en tiempo real en la pestaña *Dispositivos vinculados* con badges y botones de revocación individual y masiva.
+
+### 6. Llaves de Acceso (Passkeys) y Biometría Facial/Dactilar (FIDO2 / WebAuthn) (Estado: Planificado)
+- **Base de datos requerida:**
+  - Tabla `user_authenticators` (`id`, `user_id`, `credential_id`, `public_key`, `counter`, `transports`, `created_at`).
+- **Plan de implementación:**
+  - Librería backend: `@simplewebauthn/server`.
+  - Librería frontend: `@simplewebauthn/browser`.
+  - Permite acceso sin contraseña usando Windows Hello, Face ID, Touch ID o YubiKey mediante criptografía asimétrica de curva elíptica.
+
+### 7. Código QR de Check-in para Asistencia a Turnos (Estado: Planificado)
+- **Base de datos requerida:**
+  - Campo `checkin_token` firmado por turno o por usuario (`appointments.checkin_token`).
+- **Plan de implementación:**
+  - Generación de código QR dinámico con HMAC temporal para evitar capturas de pantalla reutilizadas.
+  - Escaneo en recepción del comercio desde la cámara del smartphone del recepcionista para cambiar estado a `ATTENDED` en tiempo real.
+

@@ -3,6 +3,14 @@ import { AuthService } from '../services/auth.service';
 import { AppError } from '../middlewares/errorHandler';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema, googleAuthSchema } from '../validators/auth.validator';
 
+const getClientMeta = (req: Request) => {
+  const userAgent = req.headers['user-agent'] as string | undefined;
+  const forwarded = req.headers['x-forwarded-for'];
+  const ipAddress = (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) || req.socket.remoteAddress || req.ip || undefined;
+  const deviceName = (req.headers['x-device-name'] as string) || undefined;
+  return { userAgent, ipAddress, deviceName };
+};
+
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -13,7 +21,7 @@ export class AuthController {
       throw new AppError('Datos inválidos', 400, details);
     }
 
-    const result = await this.authService.register(parsed.data);
+    const result = await this.authService.register(parsed.data, getClientMeta(req));
     res.status(201).json(result);
   };
 
@@ -24,7 +32,7 @@ export class AuthController {
       throw new AppError('Datos inválidos', 400, details);
     }
 
-    const result = await this.authService.login(parsed.data);
+    const result = await this.authService.login(parsed.data, getClientMeta(req));
     res.json(result);
   };
 
@@ -133,7 +141,7 @@ export class AuthController {
       throw new AppError('Datos inválidos', 400, details);
     }
 
-    const result = await this.authService.loginWithGoogle(parsed.data);
+    const result = await this.authService.loginWithGoogle(parsed.data, getClientMeta(req));
     res.json(result);
   };
 
@@ -150,4 +158,56 @@ export class AuthController {
     const result = await this.authService.verifyEmail({ token, code, verificationToken, userId });
     res.json(result);
   };
+
+  setupTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const result = await this.authService.setupTwoFactor(userId);
+    res.json(result);
+  };
+
+  verifyAndEnableTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { code } = req.body;
+    if (!code) {
+      throw new AppError('El código de 6 dígitos es requerido', 400);
+    }
+    const result = await this.authService.verifyAndEnableTwoFactor(userId, code);
+    res.json(result);
+  };
+
+  disableTwoFactor = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { password, code } = req.body;
+    const result = await this.authService.disableTwoFactor(userId, password, code);
+    res.json(result);
+  };
+
+  verifyTwoFactorLogin = async (req: Request, res: Response) => {
+    const { tempToken, code } = req.body;
+    if (!tempToken || !code) {
+      throw new AppError('Token temporal y código requeridos', 400);
+    }
+    const result = await this.authService.verifyTwoFactorLogin(tempToken, code, getClientMeta(req));
+    res.json(result);
+  };
+
+  getSessions = async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const sessions = await this.authService.getActiveSessions(user.id, user.sessionId);
+    res.json(sessions);
+  };
+
+  revokeSession = async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const { id } = req.params;
+    const result = await this.authService.revokeSession(user.id, id);
+    res.json(result);
+  };
+
+  revokeAllOtherSessions = async (req: Request, res: Response) => {
+    const user = (req as any).user;
+    const result = await this.authService.revokeAllOtherSessions(user.id, user.sessionId);
+    res.json(result);
+  };
 }
+

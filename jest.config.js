@@ -4,7 +4,7 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/*.spec.ts', '**/*.test.ts'],
   transform: {
-    '^.+\\.tsx?$': [
+    '^.+\\.[tj]sx?$': [
       'ts-jest',
       {
         tsconfig: {
@@ -16,6 +16,7 @@ module.exports = {
       },
     ],
   },
+  transformIgnorePatterns: ['node_modules/(?!(@scure|@noble|otplib)/)'],
   moduleFileExtensions: ['ts', 'js', 'json', 'node'],
   clearMocks: true,
 };

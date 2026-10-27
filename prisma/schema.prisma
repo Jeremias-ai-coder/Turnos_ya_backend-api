@@ -17,10 +17,15 @@ model User {
   emailVerified         Boolean       @default(false) @map("email_verified")
   emailNotifications    Boolean       @default(true) @map("email_notifications")
   whatsappNotifications Boolean       @default(true) @map("whatsapp_notifications")
+  twoFactorEnabled      Boolean       @default(false) @map("two_factor_enabled")
+  twoFactorSecret       String?       @map("two_factor_secret") @db.Text
+  twoFactorBackupCodes  String?       @map("two_factor_backup_codes") @db.Text
+  tempTwoFactorSecret   String?       @map("temp_two_factor_secret") @db.Text
   deletedAt             DateTime?     @map("deleted_at") @db.Timestamp(0)
   businesses            Business[]
   appointments          Appointment[]
   notifications         Notification[]
+  sessions              UserSession[]
 
   @@map("users")
 }
@@ -161,5 +166,21 @@ enum AppointmentStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+}
+
+model UserSession {
+  id           String    @id @default(uuid())
+  userId       Int       @map("user_id")
+  deviceName   String    @map("device_name") @db.VarChar(150)
+  userAgent    String?   @map("user_agent") @db.Text
+  ipAddress    String?   @map("ip_address") @db.VarChar(60)
+  lastActiveAt DateTime  @default(now()) @map("last_active_at") @db.Timestamp(0)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamp(0)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamp(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_sessions")
 }
 

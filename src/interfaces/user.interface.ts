@@ -17,6 +17,10 @@ export interface UpdateUserDTO {
   whatsappNotifications?: boolean;
   role?: Role;
   password?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string | null;
+  twoFactorBackupCodes?: string | null;
+  tempTwoFactorSecret?: string | null;
 }
 
 export interface IUserRepository {
