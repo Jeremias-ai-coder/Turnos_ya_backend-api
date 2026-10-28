@@ -23,11 +23,14 @@ export interface GetAppointmentsParams {
   date?: string;
 }
 
+import { CacheService, cacheService } from './cache.service';
+
 export class AppointmentService {
   constructor(
     private appointmentRepo: IAppointmentRepository,
     private serviceRepo?: IServiceRepository,
-    private notificationService?: NotificationService
+    private notificationService?: NotificationService,
+    private cache: CacheService = cacheService
   ) {}
 
 
@@ -69,6 +72,9 @@ export class AppointmentService {
       holdExpiresAt: expiresAt
     });
 
+    // Invalidar slots cacheados de este negocio
+    this.cache.delPattern(`slots:${data.businessId}:*`).catch(() => {});
+
     return {
       holdToken,
       expiresAt: expiresAt.toISOString()
@@ -91,8 +97,14 @@ export class AppointmentService {
         console.error('Error enviando notificaciones de reserva:', err)
       );
 
-      return confirmed;
-    }
+    // Invalidar slots cacheados y estadísticas de admin
+    await Promise.all([
+      this.cache.delPattern(`slots:${data.businessId}:*`),
+      this.cache.del('admin:stats')
+    ]);
+
+    return confirmed;
+  }
 
     // Reserva directa sin hold
     const appointmentStart = combineDateAndTime(data.date, data.time);
@@ -129,6 +141,12 @@ export class AppointmentService {
     this.triggerAppointmentNotifications(appointment.id).catch(err =>
       console.error('Error enviando notificaciones de reserva:', err)
     );
+
+    // Invalidar slots cacheados y estadísticas de admin
+    await Promise.all([
+      this.cache.delPattern(`slots:${data.businessId}:*`),
+      this.cache.del('admin:stats')
+    ]);
 
     return appointment;
   }
@@ -184,6 +202,12 @@ export class AppointmentService {
     });
 
     WebhookService.dispatch('appointment.cancelled', appointment.businessId, cancelled);
+
+    // Invalidar slots cacheados y estadísticas de admin
+    await Promise.all([
+      this.cache.delPattern(`slots:${appointment.businessId}:*`),
+      this.cache.del('admin:stats')
+    ]);
 
     // Enviar notificaciones de cancelación
     this.triggerCancellationNotifications(appointment, userId, data.reason).catch(err =>
@@ -289,6 +313,12 @@ export class AppointmentService {
       WebhookService.dispatch('appointment.completed', appointment.businessId, updated);
     }
 
+    // Invalidar slots cacheados y estadísticas de admin
+    await Promise.all([
+      this.cache.delPattern(`slots:${appointment.businessId}:*`),
+      this.cache.del('admin:stats')
+    ]);
+
     return updated;
   }
 
@@ -334,7 +364,13 @@ export class AppointmentService {
     if (!date) {
       throw new AppError('El parámetro date es requerido (formato YYYY-MM-DD)', 400);
     }
-    const busySlots = await this.appointmentRepo.findBusySlotsByDate(businessId, date);
-    return { data: busySlots };
+    return this.cache.getOrSet(
+      `slots:${businessId}:${date}`,
+      async () => {
+        const busySlots = await this.appointmentRepo.findBusySlotsByDate(businessId, date);
+        return { data: busySlots };
+      },
+      180 // 3 minutos TTL
+    );
   }
 }

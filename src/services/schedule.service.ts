@@ -2,11 +2,13 @@ import { IScheduleRepository, CreateScheduleDTO } from '../interfaces/schedule.i
 import { IBusinessRepository } from '../interfaces/business.interface';
 import { AppError } from '../middlewares/errorHandler';
 import { parseTimeToUTC } from '../utils/date';
+import { CacheService, cacheService } from './cache.service';
 
 export class ScheduleService {
   constructor(
     private scheduleRepo: IScheduleRepository,
-    private businessRepo: IBusinessRepository
+    private businessRepo: IBusinessRepository,
+    private cache: CacheService = cacheService
   ) {}
 
   async getSchedules(businessId: number) {
@@ -15,7 +17,13 @@ export class ScheduleService {
       throw new AppError('Negocio no encontrado', 404);
     }
 
-    return this.scheduleRepo.findByBusinessId(businessId);
+    return this.cache.getOrSet(
+      `business:schedules:${businessId}`,
+      async () => {
+        return this.scheduleRepo.findByBusinessId(businessId);
+      },
+      600 // 10 minutos TTL
+    );
   }
 
   async createSchedule(businessId: number, userId: number, data: { dayOfWeek: number; startTime: string; endTime: string }) {
@@ -28,12 +36,20 @@ export class ScheduleService {
       throw new AppError('No tienes permiso para modificar horarios de este negocio', 403);
     }
 
-    return this.scheduleRepo.create({
+    const created = await this.scheduleRepo.create({
       businessId,
       dayOfWeek: data.dayOfWeek,
       startTime: parseTimeToUTC(data.startTime),
       endTime: parseTimeToUTC(data.endTime)
     });
+
+    // Invalidar horarios y slots del negocio
+    await Promise.all([
+      this.cache.del(`business:schedules:${businessId}`),
+      this.cache.delPattern(`slots:${businessId}:*`)
+    ]);
+
+    return created;
   }
 
   async updateSchedule(
@@ -56,11 +72,19 @@ export class ScheduleService {
       throw new AppError('Horario no encontrado en este negocio', 404);
     }
 
-    return this.scheduleRepo.update(scheduleId, {
+    const updated = await this.scheduleRepo.update(scheduleId, {
       dayOfWeek: data.dayOfWeek,
       startTime: data.startTime ? parseTimeToUTC(data.startTime) : undefined,
       endTime: data.endTime ? parseTimeToUTC(data.endTime) : undefined
     });
+
+    // Invalidar horarios y slots del negocio
+    await Promise.all([
+      this.cache.del(`business:schedules:${businessId}`),
+      this.cache.delPattern(`slots:${businessId}:*`)
+    ]);
+
+    return updated;
   }
 
   async deleteSchedule(businessId: number, scheduleId: number, user: { id: number; role: string }) {
@@ -74,6 +98,13 @@ export class ScheduleService {
     }
 
     await this.scheduleRepo.delete(scheduleId);
+
+    // Invalidar horarios y slots del negocio
+    await Promise.all([
+      this.cache.del(`business:schedules:${businessId}`),
+      this.cache.delPattern(`slots:${businessId}:*`)
+    ]);
+
     return { message: 'Horario eliminado correctamente' };
   }
 }

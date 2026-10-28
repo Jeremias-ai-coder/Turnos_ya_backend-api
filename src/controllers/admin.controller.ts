@@ -31,4 +31,14 @@ export class AdminController {
     const result = await this.adminService.getAllAppointments();
     res.json(result);
   };
+
+  getCacheStats = async (req: Request, res: Response) => {
+    const stats = this.adminService.getCacheStats();
+    res.json(stats);
+  };
+
+  clearCache = async (req: Request, res: Response) => {
+    const result = await this.adminService.clearCache();
+    res.json(result);
+  };
 }

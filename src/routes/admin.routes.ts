@@ -33,4 +33,10 @@ router.get('/reports', authGuard, requireAdmin, bugReportController.getAdminBugR
 // PATCH /api/v1/admin/reports/:id/status — Actualizar estado del reporte (admin only)
 router.patch('/reports/:id/status', authGuard, requireAdmin, bugReportController.updateBugReportStatus);
 
+// GET /api/v1/admin/cache/stats — Estadísticas y salud de la caché inteligente (admin only)
+router.get('/cache/stats', authGuard, requireAdmin, adminController.getCacheStats);
+
+// POST /api/v1/admin/cache/clear — Purgar caché global manualmente (admin only)
+router.post('/cache/clear', authGuard, requireAdmin, adminController.clearCache);
+
 export default router;
