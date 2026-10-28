@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { generateSecret, generateURI, verify } from 'otplib';
 import QRCode from 'qrcode';
 import crypto from 'crypto';
+import { Role } from '@prisma/client';
 import { IUserRepository, CreateUserDTO, UpdateUserDTO } from '../interfaces/user.interface';
 import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
@@ -52,17 +53,20 @@ export class AuthService {
     return jwt.sign(payload, JWT_SECRET, { expiresIn: expiresIn as any });
   }
 
-  async register(data: { name: string; email: string; password: string }, meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }) {
+  async register(data: { name: string; email: string; password: string; role?: Role | string; phone?: string }, meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }) {
     const existingUser = await this.userRepo.findByEmail(data.email);
     if (existingUser) {
       throw new AppError('El email ya está en uso', 400);
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
+    const userRole = (data.role as Role) || Role.client;
     const user = await this.userRepo.create({
       name: data.name,
       email: data.email,
-      password: hashedPassword
+      password: hashedPassword,
+      role: userRole,
+      phone: data.phone,
     });
 
     const token = await this.createSessionAndToken(user, meta, '1d');

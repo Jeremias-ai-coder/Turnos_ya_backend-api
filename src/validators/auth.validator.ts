@@ -4,7 +4,13 @@ export const registerSchema = z.object({
   name: z.string().min(2, 'El nombre es requerido y debe ser mayor a 2 caracteres'),
   email: z.string().email('Debe ser un correo electrónico válido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
-  role: z.enum(['client', 'owner', 'administrator']).default('client')
+  role: z.enum(['client', 'owner', 'administrator', 'USER', 'BUSINESS_OWNER', 'ADMIN']).default('client').transform(val => {
+    if (val === 'USER') return 'client';
+    if (val === 'BUSINESS_OWNER') return 'owner';
+    if (val === 'ADMIN') return 'administrator';
+    return val;
+  }),
+  phone: z.string().optional()
 });
 
 export const loginSchema = z.object({
