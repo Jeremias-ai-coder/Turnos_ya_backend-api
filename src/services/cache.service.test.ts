@@ -1,3 +1,4 @@
+/// <reference types="jest" />
 import { CacheService } from './cache.service';
 
 describe('CacheService (Unit Tests)', () => {

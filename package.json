@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "test": "jest --passWithNoTests",
     "test:coverage": "jest --coverage",
-    "build": "prisma generate && tsc",
+    "build": "prisma generate && tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
@@ -17,7 +17,9 @@
     "db:seed": "tsx prisma/seeds/index.ts",
     "db:push:prod": "node --env-file=.env.production ./node_modules/prisma/build/index.js db push",
     "db:seed:prod": "node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs prisma/seeds/index.ts",
-    "db:sync:prod": "node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs scripts/sync-businesses-to-prod.ts"
+    "db:migrate:prod": "tsx scripts/migrate-to-clean-prod.ts",
+    "stress": "tsx scripts/stress-test.ts",
+    "stress:breaking": "tsx scripts/breaking-point-test.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seeds/index.ts"

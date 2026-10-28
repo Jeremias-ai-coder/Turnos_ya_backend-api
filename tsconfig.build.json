@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "_legacy_php",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
+  ]
+}
