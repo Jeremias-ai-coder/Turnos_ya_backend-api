@@ -2,26 +2,40 @@ import { IBusinessRepository, CreateBusinessDTO, UpdateBusinessDTO } from '../in
 import { IUserRepository } from '../interfaces/user.interface';
 import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
+import { CacheService, cacheService } from './cache.service';
 
 export class BusinessService {
   constructor(
     private businessRepo: IBusinessRepository,
-    private userRepo: IUserRepository
+    private userRepo: IUserRepository,
+    private cache: CacheService = cacheService
   ) {}
 
   async getBusinesses(page: number = 1, limit: number = 10, search?: string) {
-    const pagination = getPaginationOptions(page, limit, 200);
-    const [businesses, total] = await this.businessRepo.findAll(pagination.skip, pagination.limit, search);
-
-    return createPaginatedResponse(businesses, total, pagination.page, pagination.limit);
+    const cacheKey = `businesses:list:${page}:${limit}:${search ? search.trim().toLowerCase() : 'all'}`;
+    return this.cache.getOrSet(
+      cacheKey,
+      async () => {
+        const pagination = getPaginationOptions(page, limit, 200);
+        const [businesses, total] = await this.businessRepo.findAll(pagination.skip, pagination.limit, search);
+        return createPaginatedResponse(businesses, total, pagination.page, pagination.limit);
+      },
+      300 // 5 minutos TTL
+    );
   }
 
   async getBusinessById(id: number) {
-    const business = await this.businessRepo.findById(id);
-    if (!business) {
-      throw new AppError('Negocio no encontrado', 404);
-    }
-    return business;
+    return this.cache.getOrSet(
+      `business:detail:${id}`,
+      async () => {
+        const business = await this.businessRepo.findById(id);
+        if (!business) {
+          throw new AppError('Negocio no encontrado', 404);
+        }
+        return business;
+      },
+      600 // 10 minutos TTL
+    );
   }
 
   async createBusiness(userId: number, data: CreateBusinessDTO) {
@@ -31,6 +45,12 @@ export class BusinessService {
     if (currentUser && currentUser.role === 'client') {
       await this.userRepo.update(userId, { role: 'owner' });
     }
+
+    // Invalidar listados de comercios y estadísticas de admin
+    await Promise.all([
+      this.cache.delPattern('businesses:list:*'),
+      this.cache.del('admin:stats')
+    ]);
 
     return business;
   }
@@ -53,6 +73,14 @@ export class BusinessService {
       throw new AppError('No autorizado', 403);
     }
 
-    return this.businessRepo.update(id, data);
+    const updated = await this.businessRepo.update(id, data);
+
+    // Invalidar de forma inmediata el detalle y los listados cacheados
+    await Promise.all([
+      this.cache.del(`business:detail:${id}`),
+      this.cache.delPattern('businesses:list:*')
+    ]);
+
+    return updated;
   }
 }
