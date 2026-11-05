@@ -1,16 +1,18 @@
-import { PrismaClient, Business } from '@prisma/client';
+import { PrismaClient, Business, BusinessStatus } from '@prisma/client';
 import { IBusinessRepository, CreateBusinessDTO, UpdateBusinessDTO } from '../interfaces/business.interface';
 
 export class PrismaBusinessRepository implements IBusinessRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async findAll(skip: number, take: number, search?: string): Promise<[any[], number]> {
+  async findAll(skip: number, take: number, search?: string, status: BusinessStatus | 'ALL' = 'approved'): Promise<[any[], number]> {
     const cleanSearch = search?.trim();
-    const whereClause = cleanSearch ? {
+    const searchFilter = cleanSearch ? {
       OR: [
         { name: { contains: cleanSearch } },
         { description: { contains: cleanSearch } },
         { address: { contains: cleanSearch } },
+        { city: { contains: cleanSearch } },
+        { province: { contains: cleanSearch } },
         { category: { contains: cleanSearch } },
         { categoryRel: { name: { contains: cleanSearch } } },
         {
@@ -24,15 +26,23 @@ export class PrismaBusinessRepository implements IBusinessRepository {
           }
         }
       ]
-    } : undefined;
+    } : {};
+
+    const statusFilter = status === 'ALL' ? {} : { status: status as BusinessStatus };
+
+    const whereClause = {
+      ...searchFilter,
+      ...statusFilter
+    };
 
     const [businesses, total] = await Promise.all([
       this.prisma.business.findMany({
         skip,
         take,
         where: whereClause,
+        orderBy: { createdAt: 'desc' },
         include: {
-          owner: { select: { id: true, name: true, email: true } },
+          owner: { select: { id: true, name: true, email: true, phone: true } },
           categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
           services: {
             select: {
@@ -79,7 +89,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
     const b = await this.prisma.business.findUnique({
       where: { id },
       include: {
-        owner: { select: { id: true, name: true } },
+        owner: { select: { id: true, name: true, email: true, phone: true } },
         categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
         services: {
           select: {
@@ -122,6 +132,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
   async findByOwnerId(ownerId: number): Promise<Business[]> {
     return this.prisma.business.findMany({
       where: { ownerId },
+      orderBy: { createdAt: 'desc' },
       include: {
         categoryRel: { select: { id: true, name: true, slug: true, icon: true } }
       }
@@ -152,7 +163,8 @@ export class PrismaBusinessRepository implements IBusinessRepository {
         ...data,
         category: categoryName,
         categoryId: categoryId,
-        ownerId
+        ownerId,
+        status: 'pending_approval'
       }
     });
   }
@@ -190,7 +202,8 @@ export class PrismaBusinessRepository implements IBusinessRepository {
     });
   }
 
-  async count(): Promise<number> {
-    return this.prisma.business.count();
+  async count(status: BusinessStatus | 'ALL' = 'approved'): Promise<number> {
+    const where = status === 'ALL' ? {} : { status };
+    return this.prisma.business.count({ where });
   }
 }

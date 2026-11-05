@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { BusinessService } from '../services/business.service';
-import { createBusinessSchema } from '../validators/business.validator';
+import { createBusinessSchema, updateBusinessSchema, rejectBusinessSchema } from '../validators/business.validator';
 import { AppError } from '../middlewares/errorHandler';
 
 export class BusinessController {
@@ -10,8 +10,15 @@ export class BusinessController {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const search = (req.query.search || req.query.q) as string | undefined;
+    const userRole = (req as any).user?.role;
 
-    const result = await this.businessService.getBusinesses(page, limit, search);
+    // Solo un administrador autenticado puede consultar otros estados que no sean 'approved'
+    let status: any = 'approved';
+    if (req.query.status && userRole === 'administrator') {
+      status = req.query.status;
+    }
+
+    const result = await this.businessService.getBusinesses(page, limit, search, status);
     res.json(result);
   };
 
@@ -25,11 +32,11 @@ export class BusinessController {
     const parsed = createBusinessSchema.safeParse(req.body);
     if (!parsed.success) {
       const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
-      throw new AppError('Datos inválidos', 400, details);
+      throw new AppError('Datos de negocio inválidos', 400, details);
     }
 
     const userId = (req as any).user.id;
-    const business = await this.businessService.createBusiness(userId, parsed.data);
+    const business = await this.businessService.createBusiness(userId, parsed.data as any);
     res.status(201).json(business);
   };
 
@@ -44,7 +51,31 @@ export class BusinessController {
     const userId = (req as any).user.id;
     const userRole = (req as any).user.role;
 
-    const updated = await this.businessService.updateBusiness(id, userId, userRole, req.body);
+    const parsed = updateBusinessSchema.safeParse(req.body);
+    if (!parsed.success) {
+      const details = parsed.error.errors.map(err => ({ field: err.path.join('.'), message: err.message }));
+      throw new AppError('Datos de actualización inválidos', 400, details);
+    }
+
+    const updated = await this.businessService.updateBusiness(id, userId, userRole, parsed.data as any);
     res.json(updated);
+  };
+
+  approveBusiness = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const result = await this.businessService.approveBusiness(id, adminId);
+    res.json(result);
+  };
+
+  rejectBusiness = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const parsed = rejectBusinessSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400);
+    }
+    const result = await this.businessService.rejectBusiness(id, adminId, parsed.data.reason);
+    res.json(result);
   };
 }

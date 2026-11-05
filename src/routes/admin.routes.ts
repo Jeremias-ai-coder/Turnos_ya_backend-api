@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { adminController, bugReportController } from '../container';
+import { adminController, bugReportController, businessController } from '../container';
 import { authGuard } from '../middlewares/authGuard';
 import { AppError } from '../middlewares/errorHandler';
 
@@ -20,6 +20,15 @@ router.patch('/users/:id/role', authGuard, requireAdmin, adminController.updateU
 
 // DELETE /api/v1/admin/users/:id — Eliminar usuario (admin only)
 router.delete('/users/:id', authGuard, requireAdmin, adminController.deleteUser);
+
+// GET /api/v1/admin/businesses — Listar comercios (soporta ?status=pending_approval o ALL)
+router.get('/businesses', authGuard, requireAdmin, businessController.getBusinesses);
+
+// PATCH /api/v1/admin/businesses/:id/approve — Aprobar comercio y dar de alta
+router.patch('/businesses/:id/approve', authGuard, requireAdmin, businessController.approveBusiness);
+
+// PATCH /api/v1/admin/businesses/:id/reject — Rechazar comercio con motivo
+router.patch('/businesses/:id/reject', authGuard, requireAdmin, businessController.rejectBusiness);
 
 // GET /api/v1/admin/stats — Estadísticas globales
 router.get('/stats', authGuard, requireAdmin, adminController.getStats);
