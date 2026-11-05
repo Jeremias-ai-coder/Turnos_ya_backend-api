@@ -313,6 +313,33 @@ export class AppointmentService {
       WebhookService.dispatch('appointment.completed', appointment.businessId, updated);
     }
 
+    // Notificaciones en tiempo real según el nuevo estado del turno
+    if (status === 'CONFIRMED' && this.notificationService) {
+      const serviceName = appointment.service?.name || 'Servicio';
+      const businessName = appointment.business?.name || 'el negocio';
+      const dateFormatted = formatDateHelper(appointment.date);
+      const timeFormatted = formatTimeHelper(appointment.time);
+
+      await this.notificationService.createNotification({
+        userId: appointment.userId,
+        title: '¡Turno confirmado!',
+        message: `Tu turno para "${serviceName}" en ${businessName} el ${dateFormatted} a las ${timeFormatted} hs fue confirmado.`,
+        type: 'APPOINTMENT_CONFIRMED'
+      }).catch(err => console.error('[APPOINTMENT] Error al notificar confirmación:', err));
+    } else if (status === 'COMPLETED' && this.notificationService) {
+      const serviceName = appointment.service?.name || 'Servicio';
+      const businessName = appointment.business?.name || 'el negocio';
+
+      await this.notificationService.createNotification({
+        userId: appointment.userId,
+        title: 'Turno completado',
+        message: `Tu turno para "${serviceName}" en ${businessName} ha sido marcado como completado. ¡Gracias por tu visita!`,
+        type: 'APPOINTMENT_CONFIRMED'
+      }).catch(err => console.error('[APPOINTMENT] Error al notificar completado:', err));
+    } else if (status === 'CANCELLED') {
+      await this.triggerCancellationNotifications(appointment, userId).catch(err => console.error('[APPOINTMENT] Error al notificar cancelación:', err));
+    }
+
     // Invalidar slots cacheados y estadísticas de admin
     await Promise.all([
       this.cache.delPattern(`slots:${appointment.businessId}:*`),

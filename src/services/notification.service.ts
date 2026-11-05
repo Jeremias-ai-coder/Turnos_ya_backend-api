@@ -1,3 +1,4 @@
+import { Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { INotificationRepository, CreateNotificationDTO } from '../interfaces/notification.interface';
 import { getHoursUntilAppointment, formatTimeHelper, formatDateHelper } from '../utils/date';
@@ -5,13 +6,57 @@ import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
 
 export class NotificationService {
+  private sseClients = new Map<number, Set<Response>>();
+
   constructor(
     private notificationRepo: INotificationRepository,
     private prisma: PrismaClient
-  ) {}
+  ) { }
+
+  registerSseClient(userId: number, res: Response) {
+    if (!this.sseClients.has(userId)) {
+      this.sseClients.set(userId, new Set());
+    }
+    this.sseClients.get(userId)!.add(res);
+  }
+
+  unregisterSseClient(userId: number, res: Response) {
+    const clients = this.sseClients.get(userId);
+    if (clients) {
+      clients.delete(res);
+      if (clients.size === 0) {
+        this.sseClients.delete(userId);
+      }
+    }
+  }
+
+  broadcastToUser(userId: number, data: any) {
+    const clients = this.sseClients.get(userId);
+    if (!clients || clients.size === 0) return;
+
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    for (const client of clients) {
+      try {
+        client.write(message);
+      } catch (err) {
+        console.warn(`[SSE] Error enviando stream a usuario ${userId}:`, err);
+      }
+    }
+  }
 
   async createNotification(data: CreateNotificationDTO) {
-    return this.notificationRepo.create(data);
+    const notif = await this.notificationRepo.create(data);
+    try {
+      const unreadCount = await this.notificationRepo.countUnread(data.userId);
+      this.broadcastToUser(data.userId, {
+        type: 'NEW_NOTIFICATION',
+        notification: notif,
+        unreadCount
+      });
+    } catch (err) {
+      console.warn('[SSE] Error al notificar en tiempo real:', err);
+    }
+    return notif;
   }
 
   async getUserNotifications(userId: number, limit: number = 30, skip: number = 0) {
@@ -30,11 +75,25 @@ export class NotificationService {
     if (!notif) {
       throw new AppError('Notificación no encontrada', 404);
     }
+    try {
+      const unreadCount = await this.notificationRepo.countUnread(userId);
+      this.broadcastToUser(userId, {
+        type: 'UPDATE_UNREAD',
+        readId: id,
+        unreadCount
+      });
+    } catch { }
     return notif;
   }
 
   async markAllAsRead(userId: number) {
     const count = await this.notificationRepo.markAllAsRead(userId);
+    try {
+      this.broadcastToUser(userId, {
+        type: 'ALL_READ',
+        unreadCount: 0
+      });
+    } catch { }
     return { count };
   }
 

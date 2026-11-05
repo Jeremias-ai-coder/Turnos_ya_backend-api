@@ -7,6 +7,7 @@ const router = Router();
 router.use(authGuard); // Todas las rutas de notificaciones requieren autenticación
 
 router.get('/', notificationController.getNotifications);
+router.get('/stream', notificationController.streamNotifications);
 router.patch('/read-all', notificationController.markAllAsRead);
 router.patch('/:id/read', notificationController.markAsRead);
 
