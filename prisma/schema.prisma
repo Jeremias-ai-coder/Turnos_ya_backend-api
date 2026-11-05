@@ -37,20 +37,45 @@ enum Role {
   administrator
 }
 
+enum BusinessStatus {
+  pending_approval
+  approved
+  rejected
+  suspended
+}
+
 model Business {
-  id          Int       @id @default(autoincrement())
-  name        String    @db.VarChar(150)
-  description String?   @db.Text
-  address     String?   @db.VarChar(255)
-  phone       String?   @db.VarChar(30)
-  category    String?   @db.VarChar(50)
-  categoryId  Int?      @map("category_id")
-  logoUrl     String?   @map("logo_url") @db.VarChar(255)
-  ownerId     Int       @map("owner_id")
-  latitude    Decimal?  @db.Decimal(10, 8)
-  longitude   Decimal?  @db.Decimal(11, 8)
-  timezone    String?   @db.VarChar(100)
-  webhookUrl  String?   @map("webhook_url") @db.VarChar(255)
+  id              Int            @id @default(autoincrement())
+  name            String         @db.VarChar(150)
+  description     String?        @db.Text
+  address         String?        @db.VarChar(255)
+  city            String?        @db.VarChar(100)
+  province        String?        @db.VarChar(100)
+  phone           String?        @db.VarChar(30)
+  email           String?        @db.VarChar(150)
+  category        String?        @db.VarChar(50)
+  categoryId      Int?           @map("category_id")
+  logoUrl         String?        @map("logo_url") @db.VarChar(255)
+  ownerId         Int            @map("owner_id")
+  latitude        Decimal?       @db.Decimal(10, 8)
+  longitude       Decimal?       @db.Decimal(11, 8)
+  timezone        String?        @db.VarChar(100)
+  webhookUrl      String?        @map("webhook_url") @db.VarChar(255)
+
+  // Evidencias de veracidad y redes sociales
+  instagramUrl    String?        @map("instagram_url") @db.VarChar(255)
+  facebookUrl     String?        @map("facebook_url") @db.VarChar(255)
+  websiteUrl      String?        @map("website_url") @db.VarChar(255)
+  googleMapsUrl   String?        @map("google_maps_url") @db.VarChar(500)
+  cuit            String?        @db.VarChar(25)
+
+  // Gestión de estado y auditoría
+  status          BusinessStatus @default(pending_approval)
+  rejectionReason String?        @map("rejection_reason") @db.Text
+  reviewedAt      DateTime?      @map("reviewed_at") @db.Timestamp(0)
+  reviewedById    Int?           @map("reviewed_by_id")
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamp(0)
+  updatedAt       DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamp(0)
 
   owner       User          @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   categoryRel Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
