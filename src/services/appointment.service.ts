@@ -92,8 +92,8 @@ export class AppointmentService {
       const confirmed = await this.appointmentRepo.confirmAppointment(existingHold.id);
       WebhookService.dispatch('appointment.created', data.businessId, confirmed);
 
-      // Enviar notificaciones a cliente y owner
-      this.triggerAppointmentNotifications(confirmed.id).catch(err =>
+      // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
+      await this.triggerAppointmentNotifications(confirmed.id).catch(err =>
         console.error('Error enviando notificaciones de reserva:', err)
       );
 
@@ -137,8 +137,8 @@ export class AppointmentService {
 
     WebhookService.dispatch('appointment.created', data.businessId, appointment);
 
-    // Enviar notificaciones a cliente y owner
-    this.triggerAppointmentNotifications(appointment.id).catch(err =>
+    // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
+    await this.triggerAppointmentNotifications(appointment.id).catch(err =>
       console.error('Error enviando notificaciones de reserva:', err)
     );
 
@@ -187,9 +187,13 @@ export class AppointmentService {
       throw new AppError('No se puede cancelar un turno cuya fecha u horario ya ha transcurrido', 400);
     }
 
-    const minCancellationHours = appointment.service?.minCancellationNoticeHours ?? 24;
+    const minCancellationHours = Math.max(24, appointment.service?.minCancellationNoticeHours || 24);
 
-    if (hoursUntil < minCancellationHours && !isAdmin && !isOwner) {
+    // Los clientes (o usuarios cancelando sus propios turnos) deben cumplir estrictamente la anticipación mínima de 24hs.
+    // Solo un dueño cancelando el turno de un cliente por fuerza mayor o un administrador sobre turnos ajenos están exentos.
+    const isExempt = (isOwner && !isClient) || (isAdmin && !isClient);
+
+    if (hoursUntil < minCancellationHours && !isExempt) {
       throw new AppError(
         `Solo se pueden cancelar turnos con al menos ${minCancellationHours} horas de anticipación al horario pactado`,
         400
@@ -209,8 +213,8 @@ export class AppointmentService {
       this.cache.del('admin:stats')
     ]);
 
-    // Enviar notificaciones de cancelación
-    this.triggerCancellationNotifications(appointment, userId, data.reason).catch(err =>
+    // Enviar notificaciones de cancelación de forma síncrona
+    await this.triggerCancellationNotifications(appointment, userId, data.reason).catch(err =>
       console.error('Error enviando notificaciones de cancelación:', err)
     );
 

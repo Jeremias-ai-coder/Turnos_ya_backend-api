@@ -299,9 +299,55 @@ describe('AppointmentService (Unit Tests)', () => {
       expect(mockAppointmentRepo.cancelAppointment).toHaveBeenCalled();
       expect(result.status).toBe('CANCELLED');
     });
+
+    it('debe exigir 24 horas por defecto si el servicio tiene minCancellationNoticeHours en null o 0', async () => {
+      const d = new Date(Date.now() + 2 * 60 * 60 * 1000);
+      const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const timeStr = '1970-01-01T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':00.000Z';
+      const appointment = {
+        id: 19,
+        businessId: 10,
+        userId: 3,
+        status: 'CONFIRMED',
+        date: dateStr,
+        time: timeStr,
+        service: { minCancellationNoticeHours: null },
+        business: { ownerId: 99 },
+      };
+      mockAppointmentRepo.findById.mockResolvedValue(appointment as any);
+      await expect(
+        appointmentService.cancelAppointment(19, 3, 'client', { reason: 'Cancelando turno' })
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('24 horas de anticipación'),
+      });
+    });
+
+    it('debe rechazar la cancelación si un administrador intenta cancelar su propio turno con menos de 24 horas de anticipación', async () => {
+      const d = new Date(Date.now() + 1 * 60 * 60 * 1000);
+      const dateStr = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      const timeStr = '1970-01-01T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':00.000Z';
+      const appointment = {
+        id: 20,
+        businessId: 10,
+        userId: 1,
+        status: 'CONFIRMED',
+        date: dateStr,
+        time: timeStr,
+        service: { minCancellationNoticeHours: 24 },
+        business: { ownerId: 99 },
+      };
+      mockAppointmentRepo.findById.mockResolvedValue(appointment as any);
+      await expect(
+        appointmentService.cancelAppointment(20, 1, 'administrator', { reason: 'Mi propio turno' })
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('24 horas de anticipación'),
+      });
+    });
   });
 
-  describe('getAppointmentById', () => {
+    describe('getAppointmentById', () => {
     it('debe retornar el turno si el usuario solicitante es el cliente que lo reservó', async () => {
       const appointment = {
         id: 20,
