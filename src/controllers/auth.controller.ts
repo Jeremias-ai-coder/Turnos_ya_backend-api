@@ -91,6 +91,14 @@ export class AuthController {
     res.json(result);
   };
 
+  verifyPasswordChange2FA = async (req: Request, res: Response) => {
+    const userId = (req as any).user.id;
+    const { code } = req.body;
+
+    const result = await this.authService.verifyPasswordChange2FA(userId, code);
+    res.json(result);
+  };
+
   submitPasswordChange = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
     const { changeAuthToken, currentPassword, newPassword, skipCurrentPassword } = req.body;

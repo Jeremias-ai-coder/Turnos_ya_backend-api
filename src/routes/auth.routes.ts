@@ -14,6 +14,7 @@ router.patch('/profile', authGuard, authController.updateProfile);
 router.post('/request-password-change', authGuard, authController.requestPasswordChange);
 router.post('/request-password-change-code', authGuard, authController.requestPasswordChangeCode);
 router.post('/verify-password-change-code', authGuard, authController.verifyPasswordChangeCode);
+router.post('/verify-password-change-2fa', authGuard, authController.verifyPasswordChange2FA);
 router.post('/submit-password-change', authGuard, authController.submitPasswordChange);
 router.post('/confirm-password-change', authGuard, authController.confirmPasswordChange);
 router.post('/send-verification-email', authGuard, authController.sendVerificationEmail);

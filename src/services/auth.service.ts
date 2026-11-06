@@ -180,6 +180,14 @@ export class AuthService {
       throw new AppError('Usuario no encontrado', 404);
     }
 
+    if (user.twoFactorEnabled) {
+      throw new AppError('Tu cuenta tiene activado Google Authenticator (2FA). Debes verificar tu identidad con 2FA.', 403);
+    }
+
+    if (user.twoFactorEnabled) {
+      throw new AppError('Tu cuenta tiene activado Google Authenticator (2FA). Debes verificar tu identidad con 2FA.', 403);
+    }
+
     if (!(user as any).emailVerified) {
       throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
     }
@@ -336,11 +344,16 @@ export class AuthService {
       throw new AppError('El código de verificación ingresado es incorrecto', 400);
     }
 
+    const user = await this.userRepo.findById(userId);
+    const pwdHash = user?.password ? user.password.slice(-12) : '';
+
     const changeAuthToken = jwt.sign(
       {
         userId,
         email: decoded.email,
         type: 'PASSWORD_CHANGE_AUTHORIZED',
+        method: 'EMAIL',
+        pwdHash,
       },
       JWT_SECRET,
       { expiresIn: '15m' }
@@ -349,6 +362,80 @@ export class AuthService {
     return {
       valid: true,
       message: 'Código de seguridad verificado correctamente.',
+      changeAuthToken,
+    };
+  }
+
+  async verifyPasswordChange2FA(userId: number, code: string) {
+    if (!code) {
+      throw new AppError('El código de verificación de Google Authenticator es requerido', 400);
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (!user.twoFactorEnabled || !user.twoFactorSecret) {
+      throw new AppError('Google Authenticator (2FA) no está configurado en tu cuenta', 400);
+    }
+
+    const cleanCode = (code || '').replace(/\s+/g, '').toUpperCase();
+    const plainSecret = decryptSecret(user.twoFactorSecret);
+    let isValid = false;
+
+    // 1. Validar TOTP de 6 dígitos con ventana de tolerancia de 30s
+    if (/^\d{6}$/.test(cleanCode)) {
+      try {
+        const verification = await verify({
+          secret: plainSecret,
+          token: cleanCode,
+          epochTolerance: 30,
+        });
+        isValid = Boolean(verification.valid);
+      } catch (err) {
+        console.warn('Fallo en verificación TOTP:', err);
+      }
+    }
+
+    // 2. Si no es válido como TOTP, verificar si es un código de respaldo
+    if (!isValid && user.twoFactorBackupCodes) {
+      try {
+        const backupCodes: string[] = JSON.parse(decryptSecret(user.twoFactorBackupCodes));
+        const index = backupCodes.indexOf(cleanCode);
+        if (index !== -1) {
+          backupCodes.splice(index, 1);
+          await this.userRepo.update(user.id, {
+            twoFactorBackupCodes: encryptSecret(JSON.stringify(backupCodes)),
+          });
+          isValid = true;
+        }
+      } catch (err) {
+        console.error('Error al procesar códigos de respaldo:', err);
+      }
+    }
+
+    if (!isValid) {
+      throw new AppError('El código de Google Authenticator es incorrecto o ha expirado', 400);
+    }
+
+    const pwdHash = user?.password ? user.password.slice(-12) : '';
+
+    const changeAuthToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        type: 'PASSWORD_CHANGE_AUTHORIZED',
+        method: '2FA',
+        pwdHash,
+      },
+      JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    return {
+      valid: true,
+      message: 'Identidad verificada exitosamente mediante Google Authenticator.',
       changeAuthToken,
     };
   }
@@ -376,6 +463,10 @@ export class AuthService {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new AppError('Usuario no encontrado', 404);
+    }
+
+    if (decoded.pwdHash && user.password && decoded.pwdHash !== user.password.slice(-12)) {
+      throw new AppError('Este token de autorización ya ha sido utilizado o ha expirado. Por favor solicita una nueva verificación.', 401);
     }
 
     if (!data.skipCurrentPassword) {
