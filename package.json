@@ -16,6 +16,7 @@
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seeds/index.ts",
     "db:push:prod": "node --env-file=.env.production ./node_modules/prisma/build/index.js db push",
+    "db:push:test": "node --env-file=.env.test ./node_modules/prisma/build/index.js db push",
     "db:seed:prod": "node --env-file=.env.production ./node_modules/tsx/dist/cli.mjs prisma/seeds/index.ts",
     "db:migrate:prod": "tsx scripts/migrate-to-clean-prod.ts",
     "stress": "tsx scripts/stress-test.ts",
