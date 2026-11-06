@@ -39,7 +39,67 @@ export function parseTimeToUTC(timeInput: string | Date): Date {
  * Combina un campo Date y un campo Time en un objeto Date unificado en UTC.
  * Extrae año/mes/día de dateInput y hora/minutos de timeInput de forma determinista.
  */
-export function combineDateAndTime(dateInput: Date | string, timeInput: Date | string): Date {
+export const DEFAULT_TIMEZONE = process.env.APP_TIMEZONE || 'America/Argentina/Buenos_Aires';
+
+/**
+ * Convierte año, mes, día, hora, minutos y segundos en una zona horaria específica
+ * a un objeto Date UTC universal, garantizando consistencia independientemente
+ * de si el servidor corre en UTC (ej: Render, Docker, AWS) o en zona local.
+ */
+export function createDateInTimezone(
+  year: number,
+  month: number,
+  day: number,
+  hours: number = 0,
+  minutes: number = 0,
+  seconds: number = 0,
+  timeZone: string = DEFAULT_TIMEZONE
+): Date {
+  const dUtc = new Date(Date.UTC(year, month, day, hours, minutes, seconds));
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      second: 'numeric',
+      hour12: false,
+    });
+
+    const parts = formatter.formatToParts(dUtc);
+    const m: Record<string, string> = {};
+    for (const p of parts) {
+      m[p.type] = p.value;
+    }
+
+    const tzHour = parseInt(m.hour === '24' ? '0' : m.hour, 10);
+    const tzDay = parseInt(m.day, 10);
+    const tzMonth = parseInt(m.month, 10) - 1;
+    const tzYear = parseInt(m.year, 10);
+    const tzMin = parseInt(m.minute, 10);
+    const tzSec = parseInt(m.second || '0', 10);
+
+    const asTzUtc = Date.UTC(tzYear, tzMonth, tzDay, tzHour, tzMin, tzSec);
+    const offsetMs = asTzUtc - dUtc.getTime();
+
+    return new Date(dUtc.getTime() - offsetMs);
+  } catch {
+    return new Date(Date.UTC(year, month, day, hours + 3, minutes, seconds));
+  }
+}
+
+/**
+ * Combina un campo Date y un campo Time en un objeto Date unificado en UTC.
+ * Extrae año/mes/día de dateInput y hora/minutos de timeInput de forma determinista,
+ * respetando la zona horaria del negocio/aplicación.
+ */
+export function combineDateAndTime(
+  dateInput: Date | string,
+  timeInput: Date | string,
+  timeZone: string = DEFAULT_TIMEZONE
+): Date {
   let year: number;
   let month: number;
   let day: number;
@@ -84,7 +144,7 @@ export function combineDateAndTime(dateInput: Date | string, timeInput: Date | s
     seconds = timeInput.getUTCSeconds();
   }
 
-  return new Date(year, month, day, hours, minutes, seconds);
+  return createDateInTimezone(year, month, day, hours, minutes, seconds, timeZone);
 }
 
 /**
