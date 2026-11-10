@@ -380,17 +380,17 @@ export class AuthService {
       throw new AppError('Google Authenticator (2FA) no está configurado en tu cuenta', 400);
     }
 
-    const cleanCode = (code || '').replace(/\s+/g, '').toUpperCase();
+    const cleanCode = (code || '').replace(/[\s-]+/g, '').toUpperCase();
     const plainSecret = decryptSecret(user.twoFactorSecret);
     let isValid = false;
 
-    // 1. Validar TOTP de 6 dígitos con ventana de tolerancia de 30s
+    // 1. Validar TOTP de 6 dígitos con ventana de tolerancia de 120s (±4 pasos de 30s)
     if (/^\d{6}$/.test(cleanCode)) {
       try {
         const verification = await verify({
           secret: plainSecret,
           token: cleanCode,
-          epochTolerance: 30,
+          epochTolerance: 120,
         });
         isValid = Boolean(verification.valid);
       } catch (err) {
@@ -861,14 +861,32 @@ export class AuthService {
 
   /**
    * 2FA: Iniciar configuración generando clave secreta y código QR
+   * Si el usuario ya tiene un secreto temporal pendiente y no solicitó reset explícito,
+   * se reutiliza el mismo secreto para evitar invalidar códigos al reabrir el modal o recargar la pantalla.
    */
-  async setupTwoFactor(userId: number) {
+  async setupTwoFactor(userId: number, reset: boolean = false) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new AppError('Usuario no encontrado', 404);
     }
 
-    const secret = generateSecret();
+    let secret: string;
+    if (user.tempTwoFactorSecret && !reset) {
+      try {
+        secret = decryptSecret(user.tempTwoFactorSecret);
+      } catch (err) {
+        secret = generateSecret();
+        await this.userRepo.update(userId, {
+          tempTwoFactorSecret: encryptSecret(secret),
+        });
+      }
+    } else {
+      secret = generateSecret();
+      await this.userRepo.update(userId, {
+        tempTwoFactorSecret: encryptSecret(secret),
+      });
+    }
+
     const serviceName = 'Turnos Ya';
     const otpauthUrl = generateURI({
       issuer: serviceName,
@@ -876,11 +894,6 @@ export class AuthService {
       secret,
     });
     const qrCode = await QRCode.toDataURL(otpauthUrl);
-    const encryptedSecret = encryptSecret(secret);
-
-    await this.userRepo.update(userId, {
-      tempTwoFactorSecret: encryptedSecret,
-    });
 
     return {
       secret,
@@ -902,12 +915,12 @@ export class AuthService {
       throw new AppError('No hay ninguna configuración de 2FA pendiente. Generá un nuevo código QR.', 400);
     }
 
-    const cleanCode = (code || '').replace(/\s+/g, '');
+    const cleanCode = (code || '').replace(/[\s-]+/g, '');
     const plainSecret = decryptSecret(user.tempTwoFactorSecret);
     const verification = await verify({
       secret: plainSecret,
       token: cleanCode,
-      epochTolerance: 30,
+      epochTolerance: 120, // Tolera hasta ±120s (±4 pasos) por desincronización de reloj
     });
 
     if (!verification.valid) {
@@ -956,12 +969,12 @@ export class AuthService {
         throw new AppError('Contraseña incorrecta', 400);
       }
     } else if (code) {
-      const cleanCode = (code || '').replace(/\s+/g, '');
+      const cleanCode = (code || '').replace(/[\s-]+/g, '');
       const plainSecret = decryptSecret(user.twoFactorSecret);
       const verification = await verify({
         secret: plainSecret,
         token: cleanCode,
-        epochTolerance: 30,
+        epochTolerance: 120,
       });
       if (!verification.valid) {
         throw new AppError('Código de verificación incorrecto', 400);
@@ -1012,17 +1025,17 @@ export class AuthService {
       throw new AppError('Configuración de 2FA no encontrada', 400);
     }
 
-    const cleanCode = (code || '').replace(/\s+/g, '').toUpperCase();
+    const cleanCode = (code || '').replace(/[\s-]+/g, '').toUpperCase();
     const plainSecret = decryptSecret(user.twoFactorSecret);
     let isValid = false;
 
-    // 1. Si son 6 dígitos numéricos, validar con TOTP (RFC 6238)
+    // 1. Si son 6 dígitos numéricos, validar con TOTP (RFC 6238) con tolerancia de 120s
     if (/^\d{6}$/.test(cleanCode)) {
       try {
         const verification = await verify({
           secret: plainSecret,
           token: cleanCode,
-          epochTolerance: 30,
+          epochTolerance: 120,
         });
         isValid = Boolean(verification.valid);
       } catch (totpErr) {

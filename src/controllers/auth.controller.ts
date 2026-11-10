@@ -169,7 +169,8 @@ export class AuthController {
 
   setupTwoFactor = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const result = await this.authService.setupTwoFactor(userId);
+    const reset = req.query?.reset === 'true' || req.body?.reset === true;
+    const result = await this.authService.setupTwoFactor(userId, reset);
     res.json(result);
   };
 
