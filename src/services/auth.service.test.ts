@@ -1,8 +1,10 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { generateSync } from 'otplib';
 import { AuthService } from './auth.service';
 import { IUserRepository } from '../interfaces/user.interface';
 import { AppError } from '../middlewares/errorHandler';
+import { encryptSecret } from '../utils/crypto';
 
 describe('AuthService (Unit Tests)', () => {
   let authService: AuthService;
@@ -387,6 +389,104 @@ describe('AuthService (Unit Tests)', () => {
       expect(verifyRes.message).toContain('verificado exitosamente');
       expect(verifyRes.user.emailVerified).toBe(true);
       expect(mockUserRepo.update).toHaveBeenCalledWith(30, { emailVerified: true });
+    });
+  });
+
+  describe('2FA (Two-Factor Authentication)', () => {
+    const testSecret = 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP'; // 32 chars base32
+    const encryptedSecret = encryptSecret(testSecret);
+
+    it('setupTwoFactor debe reutilizar tempTwoFactorSecret si ya existe y reset no es true', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 42,
+        email: 'twofa@example.com',
+        tempTwoFactorSecret: encryptedSecret,
+      } as any);
+
+      const res = await authService.setupTwoFactor(42, false);
+
+      expect(res.secret).toBe(testSecret);
+      expect(res.qrCode).toBeDefined();
+      expect(mockUserRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('setupTwoFactor debe generar un nuevo secreto si reset es true', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 42,
+        email: 'twofa@example.com',
+        tempTwoFactorSecret: encryptedSecret,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({ id: 42 } as any);
+
+      const res = await authService.setupTwoFactor(42, true);
+
+      expect(res.secret).toBeDefined();
+      expect(res.secret).not.toBe(testSecret);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(42, expect.objectContaining({
+        tempTwoFactorSecret: expect.any(String),
+      }));
+    });
+
+    it('verifyAndEnableTwoFactor debe activar 2FA exitosamente con código válido y sanitizar espacios', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 42,
+        email: 'twofa@example.com',
+        tempTwoFactorSecret: encryptedSecret,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({
+        id: 42,
+        email: 'twofa@example.com',
+        twoFactorEnabled: true,
+      } as any);
+
+      const validCode = generateSync({ secret: testSecret });
+      const codeWithSpaces = `  ${validCode.slice(0, 3)} - ${validCode.slice(3)}  `;
+
+      const res = await authService.verifyAndEnableTwoFactor(42, codeWithSpaces);
+
+      expect(res.success).toBe(true);
+      expect(res.backupCodes).toHaveLength(8);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(42, expect.objectContaining({
+        twoFactorEnabled: true,
+        twoFactorSecret: encryptedSecret,
+        tempTwoFactorSecret: null,
+      }));
+    });
+
+    it('verifyAndEnableTwoFactor debe rechazar código inválido', async () => {
+      mockUserRepo.findById.mockResolvedValue({
+        id: 42,
+        email: 'twofa@example.com',
+        tempTwoFactorSecret: encryptedSecret,
+      } as any);
+
+      await expect(
+        authService.verifyAndEnableTwoFactor(42, '000000')
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('Código de verificación incorrecto o expirado'),
+      });
+    });
+
+    it('disableTwoFactor debe permitir desactivar con contraseña válida', async () => {
+      const hashedPassword = await bcrypt.hash('secretPassword', 10);
+      mockUserRepo.findById.mockResolvedValue({
+        id: 42,
+        twoFactorEnabled: true,
+        twoFactorSecret: encryptedSecret,
+        password: hashedPassword,
+      } as any);
+      mockUserRepo.update.mockResolvedValue({ id: 42, twoFactorEnabled: false } as any);
+
+      const res = await authService.disableTwoFactor(42, 'secretPassword');
+
+      expect(res.success).toBe(true);
+      expect(mockUserRepo.update).toHaveBeenCalledWith(42, {
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+        twoFactorBackupCodes: null,
+        tempTwoFactorSecret: null,
+      });
     });
   });
 });
