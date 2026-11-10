@@ -21,7 +21,12 @@ const app = express();
 
 app.use(requestLogger);
 
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
 app.use(cors({ maxAge: 86400 }));
 app.use(express.json());
 
