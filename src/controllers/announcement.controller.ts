@@ -35,3 +35,4 @@ export class AnnouncementController {
     res.json(result);
   };
 }
+
