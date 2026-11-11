@@ -65,6 +65,7 @@ describe('Zod Validators (Unit Tests)', () => {
         name: 'Barbería Moderna',
         description: 'Cortes y peinados clásicos',
         address: 'Palermo Soho, CABA',
+        phone: '1144556677',
         latitude: -34.5885,
         longitude: -58.4285,
         logoUrl: 'https://example.com/logo.jpg',

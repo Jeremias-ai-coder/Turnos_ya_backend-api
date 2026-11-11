@@ -28,4 +28,23 @@ export class ReviewController {
     const result = await this.reviewService.getBusinessReviews(businessId, page, limit);
     res.json(result);
   };
+
+  getAllReviewsForAdmin = async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 15;
+    const rating = req.query.rating ? parseInt(req.query.rating as string) : undefined;
+    const search = req.query.search as string;
+
+    const result = await this.reviewService.getAllReviewsForAdmin(page, limit, rating, search);
+    res.json(result);
+  };
+
+  deleteReviewByAdmin = async (req: Request, res: Response) => {
+    const reviewId = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const reason = req.body?.reason;
+
+    const result = await this.reviewService.deleteReviewByAdmin(reviewId, adminId, reason);
+    res.json(result);
+  };
 }

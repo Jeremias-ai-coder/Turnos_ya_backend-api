@@ -10,4 +10,7 @@ export interface IReviewRepository {
   findByAppointmentId(appointmentId: number): Promise<Review | null>;
   findByBusinessId(businessId: number, skip: number, take: number): Promise<[any[], number]>;
   getAverageRating(businessId: number): Promise<{ average: number; count: number }>;
+  findAll(options: { skip: number; take: number; rating?: number; search?: string }): Promise<[any[], number]>;
+  delete(id: number): Promise<Review>;
+  findById(id: number): Promise<any | null>;
 }

@@ -78,4 +78,22 @@ export class BusinessController {
     const result = await this.businessService.rejectBusiness(id, adminId, parsed.data.reason);
     res.json(result);
   };
+
+  suspendBusiness = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const parsed = rejectBusinessSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400);
+    }
+    const result = await this.businessService.suspendBusiness(id, adminId, parsed.data.reason);
+    res.json(result);
+  };
+
+  reactivateBusiness = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const result = await this.businessService.reactivateBusiness(id, adminId);
+    res.json(result);
+  };
 }
