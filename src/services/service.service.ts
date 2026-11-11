@@ -63,6 +63,11 @@ export class ServiceService {
       throw new AppError('No autorizado', 403);
     }
 
+    const existingService = await this.serviceRepo.findById(serviceId);
+    if (!existingService || existingService.businessId !== businessId) {
+      throw new AppError('Servicio no encontrado en este negocio', 404);
+    }
+
     await this.serviceRepo.delete(serviceId);
     return { message: 'Servicio eliminado correctamente' };
   }

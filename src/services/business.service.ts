@@ -125,6 +125,12 @@ export class BusinessService {
       throw new AppError('No autorizado', 403);
     }
 
+    // Blindaje: un dueño no administrador jamás puede auto-aprobarse ni reactivarse
+    if (userRole !== 'administrator') {
+      delete data.status;
+      delete data.rejectionReason;
+    }
+
     // Si el negocio estaba rechazado y el dueño lo edita para corregirlo, se reenvía a revisión
     if (business.status === 'rejected' && userRole !== 'administrator') {
       data.status = 'pending_approval';

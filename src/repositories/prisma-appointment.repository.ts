@@ -9,6 +9,8 @@ import {
 import { isPastGracePeriod } from '../utils/date';
 
 export class PrismaAppointmentRepository implements IAppointmentRepository {
+  private lastAutoCompleteAt = 0;
+
   constructor(private prisma: PrismaClient) {}
 
   async createHold(data: CreateHoldAppointmentDTO): Promise<Appointment> {
@@ -150,11 +152,21 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     return this.prisma.appointment.count();
   }
 
-  async autoCompleteExpiredAppointments(graceHours: number = 2): Promise<number> {
+  async autoCompleteExpiredAppointments(graceHours: number = 2, force: boolean = false): Promise<number> {
+    const nowMs = Date.now();
+    if (!force && nowMs - this.lastAutoCompleteAt < 60_000) {
+      return 0;
+    }
+    this.lastAutoCompleteAt = nowMs;
+
     try {
+      const todayEnd = new Date();
+      todayEnd.setUTCHours(23, 59, 59, 999);
+
       const activeAppointments = await this.prisma.appointment.findMany({
         where: {
-          status: { in: ['CONFIRMED', 'IN_PROGRESS'] }
+          status: { in: ['CONFIRMED', 'IN_PROGRESS'] },
+          date: { lte: todayEnd }
         },
         include: {
           service: { select: { durationMinutes: true } }

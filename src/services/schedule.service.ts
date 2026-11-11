@@ -97,6 +97,11 @@ export class ScheduleService {
       throw new AppError('No autorizado', 403);
     }
 
+    const existingSchedule = await this.scheduleRepo.findById(scheduleId);
+    if (!existingSchedule || existingSchedule.businessId !== businessId) {
+      throw new AppError('Horario no encontrado en este negocio', 404);
+    }
+
     await this.scheduleRepo.delete(scheduleId);
 
     // Invalidar horarios y slots del negocio

@@ -47,10 +47,7 @@ router.patch('/businesses/:id/reactivate', authGuard, requireAdmin, businessCont
 // POST /api/v1/admin/businesses/:id/emergency-cancel — Cancelación de emergencia por fuerza mayor
 router.post('/businesses/:id/emergency-cancel', authGuard, requireAdmin, auditController.emergencyCancel);
 
-// --- MODERACIÓN DE RESEÑAS ---
-// GET /api/v1/admin/reviews — Listar reseñas globales para moderación (admin only)
-router.get('/reviews', authGuard, requireAdmin, reviewController.getAllReviewsForAdmin);
-
+// --- MODERACIÓN DE RESEÑAS (IN-SITU EN EL COMERCIO) ---
 // PATCH /api/v1/admin/reviews/:id/hide — Ocultar reseña de la vista pública (admin only)
 router.patch('/reviews/:id/hide', authGuard, requireAdmin, reviewController.hideReview);
 

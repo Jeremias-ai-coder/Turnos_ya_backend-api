@@ -118,26 +118,6 @@ export class ReviewService {
     return { ...response, stats };
   }
 
-  async getAllReviewsForAdmin(page: number = 1, limit: number = 15, rating?: number, search?: string) {
-    const pagination = getPaginationOptions(page, limit, 50);
-    const hiddenMap = await this.getHiddenReviewMap();
-
-    const [reviews, total] = await this.reviewRepo.findAll({
-      skip: pagination.skip,
-      take: pagination.limit,
-      rating,
-      search,
-    });
-
-    const mapped = reviews.map((r) => ({
-      ...r,
-      isHidden: hiddenMap.has(r.id),
-      hiddenReason: hiddenMap.get(r.id) || null,
-    }));
-
-    return createPaginatedResponse(mapped, total, pagination.page, pagination.limit);
-  }
-
   async hideReviewByAdmin(reviewId: number, adminId: number, adminName: string, reason?: string) {
     await this.ensureTable();
     const review = await this.reviewRepo.findById(reviewId);

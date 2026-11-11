@@ -1,14 +1,23 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
+const localUrl = process.env.LOCAL_DATABASE_URL || 'mysql://root:root@localhost:3306/turnos_ya';
+const cloudTestUrl = process.env.CLOUD_TEST_DATABASE_URL || process.env.PROD_DATABASE_URL || process.env.DATABASE_URL;
+const prodUrl = process.env.PROD_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!prodUrl || !cloudTestUrl) {
+  throw new Error('Definí PROD_DATABASE_URL en las variables de entorno antes de ejecutar este script.');
+}
+
 const localPrisma = new PrismaClient({
-  datasources: { db: { url: 'mysql://root:root@localhost:3306/turnos_ya' } },
+  datasources: { db: { url: localUrl } },
 });
 
 // Base de datos previa de test en la nube (para rescatar usuarios verificados si hiciera falta)
 const cloudTestPrisma = new PrismaClient({
   datasources: {
     db: {
-      url: 'mysql://PLcsEvtrTCU4nhX.root:36nUtBZvuaNGp0lh@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/test?sslaccept=strict',
+      url: cloudTestUrl,
     },
   },
 });
@@ -17,7 +26,7 @@ const cloudTestPrisma = new PrismaClient({
 const prodPrisma = new PrismaClient({
   datasources: {
     db: {
-      url: 'mysql://PLcsEvtrTCU4nhX.root:36nUtBZvuaNGp0lh@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/turnos_ya_production?sslaccept=strict',
+      url: prodUrl,
     },
   },
 });

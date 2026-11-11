@@ -76,7 +76,7 @@ export class AdminService {
             const startOfToday = new Date(`${todayStr}T00:00:00.000Z`);
             const endOfToday = new Date(`${todayStr}T23:59:59.999Z`);
 
-            const [todayCount, pendingReportsCount, pendingBizCount, aptStatuses, recentApts, rUsers] = await Promise.all([
+            const [pendingBizCount, todayCount, pendingReportsCount, aptStatuses, recentApts, rUsers] = await Promise.all([
               this.prisma.business.count({ where: { status: "pending_approval" } }),
               this.prisma.appointment.count({
                 where: {
@@ -132,6 +132,7 @@ export class AdminService {
           totalClients,
           todayAppointments,
           pendingBugReports,
+          pendingBusinesses,
           appointmentsByStatus,
           recentAppointments,
           recentUsers

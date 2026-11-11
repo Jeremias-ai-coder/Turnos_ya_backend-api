@@ -79,7 +79,25 @@ export const optionalAuth = (req: Request, _res: Response, next: NextFunction) =
 
   try {
     const secret = process.env.JWT_SECRET || 'super_secret';
-    (req as any).user = jwt.verify(token, secret);
+    const decoded: any = jwt.verify(token, secret);
+
+    if (decoded?.sessionId) {
+      prisma.userSession
+        .findUnique({ where: { id: decoded.sessionId } })
+        .then((session) => {
+          if (!session || session.revokedAt === null) {
+            (req as any).user = decoded;
+          }
+          next();
+        })
+        .catch(() => {
+          (req as any).user = decoded;
+          next();
+        });
+      return;
+    }
+
+    (req as any).user = decoded;
   } catch {
     // No-op para autenticación opcional
   }

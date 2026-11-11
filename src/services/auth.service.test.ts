@@ -94,6 +94,28 @@ describe('AuthService (Unit Tests)', () => {
 
       expect(mockUserRepo.create).not.toHaveBeenCalled();
     });
+
+    it('debe impedir la escalada de privilegios forzando rol client si se intenta registrar como administrator', async () => {
+      mockUserRepo.findByEmail.mockResolvedValue(null);
+      mockUserRepo.create.mockImplementation(async (data: any) => ({
+        id: 2,
+        ...data,
+      }));
+
+      const result = await authService.register({
+        name: 'Intento Admin',
+        email: 'hacker@example.com',
+        password: 'password123',
+        role: 'administrator',
+      });
+
+      expect(mockUserRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'client',
+        })
+      );
+      expect(result.user.role).toBe('client');
+    });
   });
 
   describe('login', () => {
@@ -224,7 +246,7 @@ describe('AuthService (Unit Tests)', () => {
   });
 
   describe('forgotPassword & resetPassword', () => {
-    it('debe generar enlace de recuperación para un usuario existente', async () => {
+    it('debe generar enlace de recuperación sin exponer el token en la respuesta HTTP', async () => {
       mockUserRepo.findByEmail.mockResolvedValue({
         id: 7,
         name: 'Carlos Test',
@@ -232,10 +254,10 @@ describe('AuthService (Unit Tests)', () => {
         password: 'hashedPassword123',
       } as any);
 
-      const res = await authService.forgotPassword('carlos@example.com');
+      const res: any = await authService.forgotPassword('carlos@example.com');
       expect(res.message).toContain('Si el correo electrónico está registrado');
-      expect(res.resetToken).toBeDefined();
-      expect(res.resetUrl).toContain(res.resetToken);
+      expect(res.resetToken).toBeUndefined();
+      expect(res.resetUrl).toBeUndefined();
     });
 
     it('debe responder genéricamente sin error si el email no existe', async () => {
@@ -248,15 +270,12 @@ describe('AuthService (Unit Tests)', () => {
 
     it('debe restablecer la contraseña exitosamente con token válido', async () => {
       const originalPassword = 'currentPasswordHash';
-      mockUserRepo.findByEmail.mockResolvedValue({
-        id: 8,
-        name: 'Maria Test',
-        email: 'maria@example.com',
-        password: originalPassword,
-      } as any);
-
-      const forgotRes = await authService.forgotPassword('maria@example.com');
-      const token = forgotRes.resetToken!;
+      const secret = (process.env.JWT_SECRET || 'super_secret') + originalPassword;
+      const token = jwt.sign(
+        { id: 8, email: 'maria@example.com', type: 'PASSWORD_RESET' },
+        secret,
+        { expiresIn: '1h' }
+      );
 
       mockUserRepo.findById.mockResolvedValue({
         id: 8,
@@ -275,7 +294,7 @@ describe('AuthService (Unit Tests)', () => {
   });
 
   describe('loginWithGoogle', () => {
-    it('debe autenticar o crear usuario con datos de Google', async () => {
+    it('debe autenticar o crear usuario validando el token con Google', async () => {
       mockUserRepo.findByEmail.mockResolvedValue(null);
       mockUserRepo.create.mockResolvedValue({
         id: 20,
@@ -285,21 +304,36 @@ describe('AuthService (Unit Tests)', () => {
         password: 'randomHashedPassword',
       } as any);
 
-      const res = await authService.loginWithGoogle({
-        email: 'googleuser@gmail.com',
-        name: 'Google User',
-        googleId: '1234567890',
+      const fetchSpy = jest.spyOn(global as any, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          email: 'googleuser@gmail.com',
+          email_verified: true,
+          name: 'Google User',
+        }),
+      });
+
+      const res: any = await authService.loginWithGoogle({
+        credential: 'valid-google-id-token',
       });
 
       expect(res).toHaveProperty('token');
       expect(res.user.email).toBe('googleuser@gmail.com');
       expect(res.user.name).toBe('Google User');
       expect(mockUserRepo.create).toHaveBeenCalled();
+
+      fetchSpy.mockRestore();
+    });
+
+    it('debe rechazar loginWithGoogle si no se envía credencial ni accessToken', async () => {
+      await expect(authService.loginWithGoogle({})).rejects.toMatchObject({
+        statusCode: 400,
+      });
     });
   });
 
-  describe('requestPasswordChange & confirmPasswordChange', () => {
-    it('debe solicitar cambio de contraseña y emitir token de confirmación con código de 6 dígitos', async () => {
+  describe('requestPasswordChangeCode, verifyPasswordChangeCode & submitPasswordChange', () => {
+    it('debe solicitar código de cambio de contraseña sin exponer qaCode en la respuesta HTTP', async () => {
       const currentPasswordHash = await bcrypt.hash('passwordActual123', 10);
       mockUserRepo.findById.mockResolvedValue({
         id: 15,
@@ -309,10 +343,9 @@ describe('AuthService (Unit Tests)', () => {
         emailVerified: true,
       } as any);
 
-      const res = await authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456');
-      expect(res.requiresConfirmation).toBe(true);
+      const res: any = await authService.requestPasswordChangeCode(15);
       expect(res.confirmationToken).toBeDefined();
-      expect(res.qaCode).toHaveLength(6);
+      expect(res.qaCode).toBeUndefined();
     });
 
     it('debe bloquear el cambio de contraseña si el correo del usuario no está verificado', async () => {
@@ -326,11 +359,11 @@ describe('AuthService (Unit Tests)', () => {
       } as any);
 
       await expect(
-        authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456')
+        authService.requestPasswordChangeCode(15)
       ).rejects.toMatchObject({ statusCode: 403 });
     });
 
-    it('debe confirmar el cambio de contraseña con el código y token válidos', async () => {
+    it('debe verificar el código y actualizar la contraseña con el token autorizado', async () => {
       const currentPasswordHash = await bcrypt.hash('passwordActual123', 10);
       mockUserRepo.findById.mockResolvedValue({
         id: 15,
@@ -341,10 +374,16 @@ describe('AuthService (Unit Tests)', () => {
       } as any);
       mockUserRepo.update.mockResolvedValue({} as any);
 
-      const reqRes = await authService.requestPasswordChange(15, 'passwordActual123', 'nuevaPassword456');
-      const confirmRes = await authService.confirmPasswordChange(15, reqRes.confirmationToken, reqRes.qaCode!);
+      const reqRes = await authService.requestPasswordChangeCode(15);
+      const decoded: any = jwt.decode(reqRes.confirmationToken);
+      const verifyRes = await authService.verifyPasswordChangeCode(15, reqRes.confirmationToken, decoded.code);
+      const submitRes = await authService.submitPasswordChange(15, {
+        changeAuthToken: verifyRes.changeAuthToken,
+        currentPassword: 'passwordActual123',
+        newPassword: 'nuevaPassword456',
+      });
 
-      expect(confirmRes.message).toContain('Contraseña actualizada correctamente');
+      expect(submitRes.message).toContain('Contraseña actualizada correctamente');
       expect(mockUserRepo.update).toHaveBeenCalledWith(15, expect.objectContaining({
         password: expect.any(String),
       }));
@@ -352,7 +391,7 @@ describe('AuthService (Unit Tests)', () => {
   });
 
   describe('sendVerificationEmail & verifyEmail', () => {
-    it('debe enviar código de verificación por email', async () => {
+    it('debe enviar código de verificación por email sin exponer qaCode en la respuesta HTTP', async () => {
       mockUserRepo.findById.mockResolvedValue({
         id: 30,
         name: 'Lucas Test',
@@ -360,9 +399,9 @@ describe('AuthService (Unit Tests)', () => {
         emailVerified: false,
       } as any);
 
-      const res = await authService.sendVerificationEmail(30);
+      const res: any = await authService.sendVerificationEmail(30);
       expect(res.message).toContain('Código de verificación enviado');
-      expect(res.qaCode).toHaveLength(6);
+      expect(res.qaCode).toBeUndefined();
       expect(res.verificationToken).toBeDefined();
     });
 
@@ -381,8 +420,9 @@ describe('AuthService (Unit Tests)', () => {
       } as any);
 
       const sendRes = await authService.sendVerificationEmail(30);
+      const decoded: any = jwt.decode(sendRes.verificationToken!);
       const verifyRes = await authService.verifyEmail({
-        code: sendRes.qaCode!,
+        code: decoded.code,
         verificationToken: sendRes.verificationToken,
       });
 

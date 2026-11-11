@@ -1,11 +1,17 @@
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 
+const localUrl = process.env.LOCAL_DATABASE_URL || 'mysql://root:root@localhost:3306/turnos_ya';
+const prodUrl = process.env.PROD_DATABASE_URL || process.env.DATABASE_URL;
+
+if (!prodUrl) {
+  throw new Error('Definí PROD_DATABASE_URL o DATABASE_URL en las variables de entorno antes de ejecutar este script.');
+}
+
 const localPrisma = new PrismaClient({
-  datasources: { db: { url: 'mysql://root:root@localhost:3306/turnos_ya' } },
+  datasources: { db: { url: localUrl } },
 });
 
-const prodUrl =
-  'mysql://PLcsEvtrTCU4nhX.root:36nUtBZvuaNGp0lh@gateway01.us-east-1.prod.aws.tidbcloud.com:4000/test?sslaccept=strict';
 const prodPrisma = new PrismaClient({
   datasources: { db: { url: prodUrl } },
 });

@@ -60,7 +60,8 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
-    const userRole = (data.role as Role) || Role.client;
+    // Blindaje de seguridad: el registro público jamás puede otorgar rol 'administrator'
+    const userRole: Role = data.role === Role.owner || data.role === 'BUSINESS_OWNER' ? Role.owner : Role.client;
     const user = await this.userRepo.create({
       name: data.name,
       email: data.email,
@@ -156,107 +157,6 @@ export class AuthService {
     return this.sanitizeUser(updated);
   }
 
-  async changePassword(userId: number, currentPassword?: string, newPassword?: string, code?: string, confirmationToken?: string) {
-    if (confirmationToken && code) {
-      return this.confirmPasswordChange(userId, confirmationToken, code);
-    }
-    if (!currentPassword || !newPassword) {
-      throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
-    }
-    return this.requestPasswordChange(userId, currentPassword, newPassword);
-  }
-
-  async requestPasswordChange(userId: number, currentPassword: string, newPassword: string) {
-    if (!currentPassword || !newPassword) {
-      throw new AppError('Debe enviar la contraseña actual y la nueva contraseña', 400);
-    }
-
-    if (typeof newPassword !== 'string' || newPassword.length < 6) {
-      throw new AppError('La nueva contraseña debe tener al menos 6 caracteres', 400);
-    }
-
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new AppError('Usuario no encontrado', 404);
-    }
-
-    if (user.twoFactorEnabled) {
-      throw new AppError('Tu cuenta tiene activado Google Authenticator (2FA). Debes verificar tu identidad con 2FA.', 403);
-    }
-
-    if (user.twoFactorEnabled) {
-      throw new AppError('Tu cuenta tiene activado Google Authenticator (2FA). Debes verificar tu identidad con 2FA.', 403);
-    }
-
-    if (!(user as any).emailVerified) {
-      throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
-    }
-
-    const isValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isValid) {
-      throw new AppError('La contraseña actual es incorrecta', 401);
-    }
-
-    // Generar código numérico de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-
-    // Token firmado por 10 minutos
-    const confirmationToken = jwt.sign(
-      {
-        userId: user.id,
-        email: user.email,
-        code,
-        hashedNewPassword,
-        type: 'PASSWORD_CHANGE_CONFIRM',
-      },
-      JWT_SECRET,
-      { expiresIn: '10m' }
-    );
-
-    // Ocultar parcialmente el correo: j***s@dominio.com
-    const emailParts = user.email.split('@');
-    const maskedUser = emailParts[0].length > 2
-      ? emailParts[0][0] + '***' + emailParts[0].slice(-1)
-      : emailParts[0];
-    const maskedEmail = `${maskedUser}@${emailParts[1]}`;
-
-    sendEmail({
-      to: user.email,
-      subject: 'Código de confirmación para cambio de contraseña - Turnos Ya',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de tu cuenta</p>
-          </div>
-          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
-          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
-            Recibimos una solicitud para modificar la contraseña de tu cuenta desde tu panel de perfil. 
-            Para autorizar este cambio, ingresa el siguiente código de verificación de 6 dígitos:
-          </p>
-          <div style="text-align: center; margin: 24px 0;">
-            <div style="display: inline-block; background: #f0f9ff; border: 2px dashed #009ee3; padding: 14px 32px; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #009ee3; border-radius: 10px;">
-              ${code}
-            </div>
-            <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Este código es válido por 10 minutos.</p>
-          </div>
-          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #dc2626; margin: 0;">
-            ⚠️ Si tú no realizaste esta solicitud, nadie puede cambiar tu contraseña sin este código. Te sugerimos revisar la seguridad de tu cuenta.
-          </p>
-        </div>
-      `,
-    }).catch(err => console.error('[EMAIL] Error al enviar código de cambio de contraseña:', err));
-
-    return {
-      requiresConfirmation: true,
-      message: `Hemos enviado un código de confirmación de 6 dígitos a ${maskedEmail}.`,
-      confirmationToken,
-      qaCode: code, // Permite pruebas automáticas inmediatas
-    };
-  }
-
   async requestPasswordChangeCode(userId: number) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
@@ -320,7 +220,6 @@ export class AuthService {
     return {
       message: `Hemos enviado un código de confirmación de 6 dígitos a ${maskedEmail}.`,
       confirmationToken,
-      qaCode: code, // Permite pruebas automáticas inmediatas
     };
   }
 
@@ -469,7 +368,11 @@ export class AuthService {
       throw new AppError('Este token de autorización ya ha sido utilizado o ha expirado. Por favor solicita una nueva verificación.', 401);
     }
 
-    if (!data.skipCurrentPassword) {
+    const canSkipCurrentPassword = Boolean(
+      data.skipCurrentPassword && (decoded.method === 'EMAIL' || decoded.method === '2FA')
+    );
+
+    if (!canSkipCurrentPassword) {
       if (!data.currentPassword) {
         throw new AppError('Debes ingresar tu contraseña actual', 400);
       }
@@ -497,7 +400,7 @@ export class AuthService {
           </p>
           <div style="background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 16px 0; border-radius: 4px;">
             <p style="margin: 0; font-size: 13px; color: #166534; font-weight: 600;">
-              ✓ Contraseña actualizada mediante verificación de identidad por correo electrónico.
+              ✓ Contraseña actualizada mediante verificación de identidad (${decoded.method === '2FA' ? 'Google Authenticator 2FA' : 'correo electrónico'}).
             </p>
           </div>
           <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
@@ -511,53 +414,6 @@ export class AuthService {
     return {
       message: 'Contraseña actualizada correctamente. Te enviamos un correo con la confirmación.',
     };
-  }
-
-  async confirmPasswordChange(userId: number, confirmationToken: string, code: string) {
-    if (!confirmationToken || !code) {
-      throw new AppError('El token de confirmación y el código son requeridos', 400);
-    }
-
-    let decoded: any;
-    try {
-      decoded = jwt.verify(confirmationToken, JWT_SECRET);
-    } catch {
-      throw new AppError('El código o enlace de confirmación ha expirado o es inválido', 400);
-    }
-
-    if (decoded.type !== 'PASSWORD_CHANGE_CONFIRM' || decoded.userId !== userId) {
-      throw new AppError('El token de confirmación no corresponde al usuario actual', 403);
-    }
-
-    if (decoded.code !== code.trim()) {
-      throw new AppError('El código de verificación ingresado es incorrecto', 400);
-    }
-
-    const user = await this.userRepo.findById(userId);
-    if (!user) {
-      throw new AppError('Usuario no encontrado', 404);
-    }
-
-    if (!(user as any).emailVerified) {
-      throw new AppError('Debes verificar tu correo electrónico antes de poder cambiar tu contraseña.', 403);
-    }
-
-    await this.userRepo.update(userId, { password: decoded.hashedNewPassword });
-
-    sendEmail({
-      to: user.email,
-      subject: 'Tu contraseña ha sido actualizada con éxito - Turnos Ya',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <h2 style="color: #009ee3; margin-top: 0;">Turnos Ya</h2>
-          <p>Hola <strong>${user.name}</strong>,</p>
-          <p>Te confirmamos que la contraseña de tu cuenta ha sido actualizada exitosamente desde tu panel de seguridad.</p>
-          <p style="font-size: 12px; color: #94a3b8;">Si no realizaste esta acción, por favor comunícate de inmediato con el soporte de Turnos Ya.</p>
-        </div>
-      `,
-    }).catch(err => console.error('[EMAIL] Error al enviar confirmación de cambio:', err));
-
-    return { message: 'Contraseña actualizada correctamente.' };
   }
 
   async forgotPassword(email: string) {
@@ -615,11 +471,6 @@ export class AuthService {
     return {
       message: 'Si el correo electrónico está registrado, recibirás un enlace para restablecer tu contraseña.',
       sent: emailResult.sent,
-      reason: emailResult.reason || (emailResult.sent ? undefined : 'smtp-failed'),
-      emailError: emailResult.error,
-      // En modo híbrido / desarrollo / preview, devolvemos el resetUrl para pruebas inmediatas
-      resetUrl,
-      resetToken: token,
     };
   }
 
@@ -672,56 +523,71 @@ export class AuthService {
   }
 
   async loginWithGoogle(
-    data: { credential?: string; accessToken?: string; email?: string; name?: string; googleId?: string },
+    data: { credential?: string; accessToken?: string },
     meta?: { userAgent?: string; ipAddress?: string; deviceName?: string }
   ) {
-    let email = data.email?.toLowerCase().trim();
-    let name = data.name?.trim();
+    if (!data.accessToken && !data.credential) {
+      throw new AppError('Se requiere un token o credencial criptográfica de Google', 400);
+    }
+
+    let email: string | undefined;
+    let name: string | undefined;
+    const expectedClientId = process.env.GOOGLE_CLIENT_ID;
 
     // 1. Si viene el accessToken de Google OAuth 2.0 (flujo select_account)
     if (data.accessToken) {
+      let payload: any;
       try {
-        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${data.accessToken}`);
+        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${encodeURIComponent(data.accessToken)}`);
         if (!googleRes.ok) {
           throw new Error('Google access token invalid');
         }
-        const payload: any = await googleRes.json();
-        if (payload.email) {
-          email = payload.email.toLowerCase().trim();
-        }
-      } catch (err) {
-        if (!email) {
-          throw new AppError('Token de acceso de Google inválido o expirado', 401);
-        }
+        payload = await googleRes.json();
+      } catch {
+        throw new AppError('Token de acceso de Google inválido o expirado', 401);
       }
+
+      if (expectedClientId && payload.aud && payload.aud !== expectedClientId) {
+        throw new AppError('El token de Google no pertenece a esta aplicación', 401);
+      }
+      if (!payload.email || payload.email_verified === 'false' || payload.email_verified === false) {
+        throw new AppError('La cuenta de Google no posee un correo electrónico verificado', 401);
+      }
+      email = payload.email.toLowerCase().trim();
+      name = payload.name || payload.given_name || email?.split('@')[0];
     }
     // 2. Si viene la credencial JWT de Google Identity Services
     else if (data.credential) {
+      let payload: any;
       try {
-        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${data.credential}`);
+        const googleRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(data.credential)}`);
         if (!googleRes.ok) {
           throw new Error('Google token invalid');
         }
-        const payload: any = await googleRes.json();
-        email = payload.email?.toLowerCase().trim();
-        name = payload.name || payload.given_name || email?.split('@')[0];
-      } catch (err) {
-        // Si no se pudo validar la credencial externa y no hay fallback de email, rechazar
-        if (!email) {
-          throw new AppError('Credencial de Google inválida o expirada', 401);
-        }
+        payload = await googleRes.json();
+      } catch {
+        throw new AppError('Credencial de Google inválida o expirada', 401);
       }
+
+      if (expectedClientId && payload.aud && payload.aud !== expectedClientId) {
+        throw new AppError('La credencial de Google no pertenece a esta aplicación', 401);
+      }
+      if (!payload.email || payload.email_verified === 'false' || payload.email_verified === false) {
+        throw new AppError('La cuenta de Google no posee un correo electrónico verificado', 401);
+      }
+      email = payload.email.toLowerCase().trim();
+      name = payload.name || payload.given_name || email?.split('@')[0];
     }
 
     if (!email) {
-      throw new AppError('No se pudo obtener el correo electrónico desde Google', 400);
+      throw new AppError('No se pudo obtener el correo electrónico verificado desde Google', 401);
     }
 
     let user = await this.userRepo.findByEmail(email);
 
     if (!user) {
       // Registrar nuevo usuario desde Google con rol cliente (pre-verificado)
-      const randomPassword = await bcrypt.hash(Math.random().toString(36).slice(-10) + Date.now().toString(), 10);
+      const randomPassword = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
       user = await this.userRepo.create({
         name: name || email.split('@')[0],
         email,
@@ -731,6 +597,21 @@ export class AuthService {
     } else if (!(user as any).emailVerified) {
       // Si el usuario ya existía con registro tradicional, el inicio con Google valida su correo
       user = await this.userRepo.update(user.id, { emailVerified: true });
+    }
+
+    // Respetar siempre 2FA (Google Authenticator) si la cuenta lo tiene habilitado
+    if (user.twoFactorEnabled && user.twoFactorSecret) {
+      const tempToken = jwt.sign(
+        { userId: user.id, scope: '2fa_pending' },
+        JWT_SECRET,
+        { expiresIn: '5m' }
+      );
+
+      return {
+        require2FA: true,
+        tempToken,
+        message: 'Se requiere código de autenticación en dos pasos (Google Authenticator)',
+      };
     }
 
     const token = await this.createSessionAndToken(user, meta, '30d');
@@ -804,8 +685,6 @@ export class AuthService {
     return {
       message: 'Código de verificación enviado a tu correo.',
       verificationToken,
-      qaCode: code,
-      verifyUrl,
     };
   }
 
@@ -1145,6 +1024,32 @@ export class AuthService {
     });
 
     return { message: 'Todas las demás sesiones fueron cerradas con éxito.' };
+  }
+
+  /**
+   * Da de baja (soft-delete) la cuenta del usuario autenticado y revoca todas sus sesiones
+   */
+  async deactivateAccount(userId: number) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+    if (user.role === 'administrator') {
+      throw new AppError('Las cuentas de Administrador del Sistema están protegidas contra baja automática.', 403);
+    }
+
+    try {
+      await prisma.userSession.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    } catch {
+      // Ignorar si userSession no está disponible en entorno de test
+    }
+
+    await this.userRepo.delete(userId);
+
+    return { message: 'Tu cuenta ha sido dada de baja exitosamente.' };
   }
 }
 

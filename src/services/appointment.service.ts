@@ -2,8 +2,8 @@ import crypto from 'crypto';
 import { AppointmentStatus } from '@prisma/client';
 import { IAppointmentRepository } from '../interfaces/appointment.interface';
 import { IServiceRepository } from '../interfaces/service.interface';
+import { IBusinessRepository } from '../interfaces/business.interface';
 import { NotificationService } from './notification.service';
-import { WebhookService } from '../infrastructure/webhook.service';
 import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
 import {
@@ -30,7 +30,8 @@ export class AppointmentService {
     private appointmentRepo: IAppointmentRepository,
     private serviceRepo?: IServiceRepository,
     private notificationService?: NotificationService,
-    private cache: CacheService = cacheService
+    private cache: CacheService = cacheService,
+    private businessRepo?: IBusinessRepository
   ) {}
 
 
@@ -41,13 +42,29 @@ export class AppointmentService {
       throw new AppError('No es posible reservar un turno en una fecha u horario que ya ha transcurrido', 400);
     }
 
+    if (this.businessRepo) {
+      const business = await this.businessRepo.findById(Number(data.businessId));
+      if (!business) {
+        throw new AppError('Negocio no encontrado', 404);
+      }
+      if (business.status && business.status !== 'approved') {
+        throw new AppError('Este comercio no se encuentra habilitado para recibir reservas en este momento', 400);
+      }
+    }
+
     const dateUtc = new Date(data.date.includes('T') ? data.date : `${data.date}T00:00:00.000Z`);
     const timeUtc = parseTimeToUTC(data.time);
 
     let durationMinutes = 30;
     if (this.serviceRepo) {
       const service = await this.serviceRepo.findById(data.serviceId);
-      if (service) durationMinutes = service.durationMinutes;
+      if (!service) {
+        throw new AppError('Servicio no encontrado', 404);
+      }
+      if (service.businessId !== undefined && Number(service.businessId) !== Number(data.businessId)) {
+        throw new AppError('El servicio seleccionado no pertenece a este comercio', 400);
+      }
+      durationMinutes = service.durationMinutes;
     }
 
     // 2. Validar que el horario no esté ocupado por otro usuario
@@ -82,6 +99,16 @@ export class AppointmentService {
   }
 
   async createAppointment(userId: number, data: { businessId: number; serviceId: number; date: string; time: string; holdToken?: string }) {
+    if (this.businessRepo) {
+      const business = await this.businessRepo.findById(Number(data.businessId));
+      if (!business) {
+        throw new AppError('Negocio no encontrado', 404);
+      }
+      if (business.status && business.status !== 'approved') {
+        throw new AppError('Este comercio no se encuentra habilitado para recibir reservas en este momento', 400);
+      }
+    }
+
     if (data.holdToken) {
       const existingHold = await this.appointmentRepo.findByHoldToken(data.holdToken);
 
@@ -89,22 +116,25 @@ export class AppointmentService {
         throw new AppError('El bloqueo temporal del turno ha expirado o es inválido', 400);
       }
 
+      if (existingHold.userId !== undefined && existingHold.userId !== userId) {
+        throw new AppError('El bloqueo temporal pertenece a otro usuario', 403);
+      }
+
       const confirmed = await this.appointmentRepo.confirmAppointment(existingHold.id);
-      WebhookService.dispatch('appointment.created', data.businessId, confirmed);
 
       // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
       await this.triggerAppointmentNotifications(confirmed.id).catch(err =>
         console.error('Error enviando notificaciones de reserva:', err)
       );
 
-    // Invalidar slots cacheados y estadísticas de admin
-    await Promise.all([
-      this.cache.delPattern(`slots:${data.businessId}:*`),
-      this.cache.del('admin:stats')
-    ]);
+      // Invalidar slots cacheados y estadísticas de admin
+      await Promise.all([
+        this.cache.delPattern(`slots:${data.businessId}:*`),
+        this.cache.del('admin:stats')
+      ]);
 
-    return confirmed;
-  }
+      return confirmed;
+    }
 
     // Reserva directa sin hold
     const appointmentStart = combineDateAndTime(data.date, data.time);
@@ -118,7 +148,13 @@ export class AppointmentService {
     let durationMinutes = 30;
     if (this.serviceRepo) {
       const service = await this.serviceRepo.findById(data.serviceId);
-      if (service) durationMinutes = service.durationMinutes;
+      if (!service) {
+        throw new AppError('Servicio no encontrado', 404);
+      }
+      if (service.businessId !== undefined && Number(service.businessId) !== Number(data.businessId)) {
+        throw new AppError('El servicio seleccionado no pertenece a este comercio', 400);
+      }
+      durationMinutes = service.durationMinutes;
     }
 
     const isBusy = await this.appointmentRepo.isSlotBusy(data.businessId, dateUtc, timeUtc, durationMinutes, userId);
@@ -134,8 +170,6 @@ export class AppointmentService {
       time: timeUtc,
       status: 'CONFIRMED'
     });
-
-    WebhookService.dispatch('appointment.created', data.businessId, appointment);
 
     // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
     await this.triggerAppointmentNotifications(appointment.id).catch(err =>
@@ -204,8 +238,6 @@ export class AppointmentService {
       cancelledReason: data.reason,
       cancelledByUserId: data.cancelledByUserId || userId.toString()
     });
-
-    WebhookService.dispatch('appointment.cancelled', appointment.businessId, cancelled);
 
     // Invalidar slots cacheados y estadísticas de admin
     await Promise.all([
@@ -313,10 +345,6 @@ export class AppointmentService {
 
     const updated = await this.appointmentRepo.updateStatus(id, status);
 
-    if (status === 'COMPLETED') {
-      WebhookService.dispatch('appointment.completed', appointment.businessId, updated);
-    }
-
     // Notificaciones en tiempo real según el nuevo estado del turno
     if (status === 'CONFIRMED' && this.notificationService) {
       const serviceName = appointment.service?.name || 'Servicio';
@@ -362,6 +390,15 @@ export class AppointmentService {
     };
 
     if (params.businessId) {
+      if (this.businessRepo && params.userRole !== 'administrator') {
+        const business = await this.businessRepo.findById(Number(params.businessId));
+        if (!business) {
+          throw new AppError('Negocio no encontrado', 404);
+        }
+        if (business.ownerId !== params.userId) {
+          throw new AppError('No tienes permiso para ver la agenda privada de este comercio', 403);
+        }
+      }
       filterOptions.businessId = params.businessId;
       if (params.date) {
         filterOptions.date = params.date;

@@ -4,10 +4,9 @@ export const registerSchema = z.object({
   name: z.string().min(2, 'El nombre es requerido y debe ser mayor a 2 caracteres'),
   email: z.string().email('Debe ser un correo electrónico válido'),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
-  role: z.enum(['client', 'owner', 'administrator', 'USER', 'BUSINESS_OWNER', 'ADMIN']).default('client').transform(val => {
+  role: z.enum(['client', 'owner', 'USER', 'BUSINESS_OWNER']).default('client').transform(val => {
     if (val === 'USER') return 'client';
     if (val === 'BUSINESS_OWNER') return 'owner';
-    if (val === 'ADMIN') return 'administrator';
     return val;
   }),
   phone: z.string().optional()
@@ -28,12 +27,9 @@ export const resetPasswordSchema = z.object({
 });
 
 export const googleAuthSchema = z.object({
-  credential: z.string().optional(),
-  accessToken: z.string().optional(),
-  email: z.string().email().optional(),
-  name: z.string().optional(),
-  googleId: z.string().optional()
-}).refine(data => data.credential || data.accessToken || (data.email && data.name), {
-  message: 'Debe enviar una credencial o token de acceso de Google válido o los datos de usuario'
+  credential: z.string().min(10).optional(),
+  accessToken: z.string().min(10).optional(),
+}).refine(data => Boolean(data.credential || data.accessToken), {
+  message: 'Debe enviar una credencial o token de acceso de Google válido'
 });
 

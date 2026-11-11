@@ -1,5 +1,27 @@
 import { z } from 'zod';
 
+const safeHttpUrl = z
+  .string()
+  .trim()
+  .refine(
+    (val) => !val || /^https?:\/\//i.test(val),
+    'La URL debe comenzar con http:// o https://'
+  )
+  .optional()
+  .nullable()
+  .or(z.literal(''));
+
+const safeLogoUrl = z
+  .string()
+  .trim()
+  .refine(
+    (val) => !val || /^https?:\/\//i.test(val) || /^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/i.test(val),
+    'El logo debe ser una URL http(s):// o una imagen válida'
+  )
+  .optional()
+  .nullable()
+  .or(z.literal(''));
+
 export const createBusinessSchema = z.object({
   name: z.string().min(2, 'El nombre debe tener al menos 2 caracteres'),
   description: z.string().optional().nullable(),
@@ -10,17 +32,17 @@ export const createBusinessSchema = z.object({
   email: z.string().email('Email inválido').optional().nullable().or(z.literal('')),
   category: z.string().optional().nullable(),
   categoryId: z.number().int().positive().optional().nullable(),
-  logoUrl: z.string().optional().nullable().or(z.literal('')),
+  logoUrl: safeLogoUrl,
   latitude: z.number().optional().nullable(),
   longitude: z.number().optional().nullable(),
   timezone: z.string().optional().nullable(),
-  webhookUrl: z.string().optional().nullable().or(z.literal('')),
+  webhookUrl: safeHttpUrl,
 
   // Evidencias de veracidad y redes sociales
-  instagramUrl: z.string().optional().nullable().or(z.literal('')),
-  facebookUrl: z.string().optional().nullable().or(z.literal('')),
-  websiteUrl: z.string().optional().nullable().or(z.literal('')),
-  googleMapsUrl: z.string().optional().nullable().or(z.literal('')),
+  instagramUrl: safeHttpUrl,
+  facebookUrl: safeHttpUrl,
+  websiteUrl: safeHttpUrl,
+  googleMapsUrl: safeHttpUrl,
   cuit: z.string().optional().nullable().or(z.literal('')),
 });
 
