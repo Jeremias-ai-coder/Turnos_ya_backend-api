@@ -62,3 +62,27 @@ export const authGuard = (req: Request, res: Response, next: NextFunction) => {
 
     next();
   };
+
+export const optionalAuth = (req: Request, _res: Response, next: NextFunction) => {
+  let token: string | undefined;
+  const authHeader = req.headers.authorization;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.query && typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const secret = process.env.JWT_SECRET || 'super_secret';
+    (req as any).user = jwt.verify(token, secret);
+  } catch {
+    // No-op para autenticación opcional
+  }
+
+  next();
+};

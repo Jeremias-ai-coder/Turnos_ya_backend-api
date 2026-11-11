@@ -51,7 +51,13 @@ router.post('/businesses/:id/emergency-cancel', authGuard, requireAdmin, auditCo
 // GET /api/v1/admin/reviews — Listar reseñas globales para moderación (admin only)
 router.get('/reviews', authGuard, requireAdmin, reviewController.getAllReviewsForAdmin);
 
-// DELETE /api/v1/admin/reviews/:id — Moderar/eliminar reseña inapropiada (admin only)
+// PATCH /api/v1/admin/reviews/:id/hide — Ocultar reseña de la vista pública (admin only)
+router.patch('/reviews/:id/hide', authGuard, requireAdmin, reviewController.hideReview);
+
+// PATCH /api/v1/admin/reviews/:id/unhide — Restaurar reseña a la vista pública (admin only)
+router.patch('/reviews/:id/unhide', authGuard, requireAdmin, reviewController.unhideReview);
+
+// DELETE /api/v1/admin/reviews/:id — Moderar/eliminar permanentemente reseña inapropiada (admin only)
 router.delete('/reviews/:id', authGuard, requireAdmin, reviewController.deleteReviewByAdmin);
 
 // --- GESTIÓN DE CATEGORÍAS Y RUBROS ---
