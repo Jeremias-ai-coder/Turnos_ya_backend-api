@@ -21,6 +21,8 @@ import { ReviewService } from './services/review.service';
 import { NotificationService } from './services/notification.service';
 import { CategoryService } from './services/category.service';
 import { BugReportService } from './services/bug-report.service';
+import { AnnouncementService } from './services/announcement.service';
+import { AuditService } from './services/audit.service';
 import { ReminderJob } from './infrastructure/reminder.job';
 
 // Controladores
@@ -34,6 +36,8 @@ import { ReviewController } from './controllers/review.controller';
 import { NotificationController } from './controllers/notification.controller';
 import { CategoryController } from './controllers/category.controller';
 import { BugReportController } from './controllers/bug-report.controller';
+import { AnnouncementController } from './controllers/announcement.controller';
+import { AuditController } from './controllers/audit.controller';
 
 // 1. Instanciación de Repositorios (Inyección de Prisma Client)
 export const serviceRepository = new PrismaServiceRepository(prisma);
@@ -56,6 +60,8 @@ export const adminService = new AdminService(userRepository, businessRepository,
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository);
 export const categoryService = new CategoryService(prisma);
 export const bugReportService = new BugReportService(bugReportRepository);
+export const announcementService = new AnnouncementService(prisma);
+export const auditService = new AuditService(prisma, notificationService);
 
 // Tareas en segundo plano (Scheduler)
 export const reminderJob = new ReminderJob(notificationService);
@@ -71,4 +77,6 @@ export const reviewController = new ReviewController(reviewService);
 export const notificationController = new NotificationController(notificationService);
 export const categoryController = new CategoryController(categoryService);
 export const bugReportController = new BugReportController(bugReportService);
+export const announcementController = new AnnouncementController(announcementService);
+export const auditController = new AuditController(auditService);
 

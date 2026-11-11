@@ -11,6 +11,7 @@ import healthRoutes from './routes/health.routes';
 import notificationRoutes from './routes/notification.routes';
 import categoryRoutes from './routes/category.routes';
 import reportRoutes from './routes/report.routes';
+import announcementRoutes from './routes/announcement.routes';
 import { reminderJob } from './container';
 import { errorHandler } from './middlewares/errorHandler';
 import { requestLogger } from './middlewares/requestLogger';
@@ -43,6 +44,7 @@ app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/announcements', announcementRoutes);
 
 // Direct route aliases (para compatibilidad si el cliente omite /api/v1)
 app.use('/auth', authRoutes);
@@ -53,6 +55,7 @@ app.use('/appointments', appointmentRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/admin', adminRoutes);
 app.use('/reports', reportRoutes);
+app.use('/announcements', announcementRoutes);
 
 // Global error handler (RFC 7807)
 app.use(errorHandler);

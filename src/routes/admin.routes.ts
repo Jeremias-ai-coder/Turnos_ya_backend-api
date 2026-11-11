@@ -1,5 +1,13 @@
 import { Router } from 'express';
-import { adminController, bugReportController, businessController, reviewController } from '../container';
+import {
+  adminController,
+  bugReportController,
+  businessController,
+  reviewController,
+  categoryController,
+  announcementController,
+  auditController
+} from '../container';
 import { authGuard } from '../middlewares/authGuard';
 import { AppError } from '../middlewares/errorHandler';
 
@@ -36,12 +44,50 @@ router.patch('/businesses/:id/suspend', authGuard, requireAdmin, businessControl
 // PATCH /api/v1/admin/businesses/:id/reactivate — Reactivar comercio suspendido
 router.patch('/businesses/:id/reactivate', authGuard, requireAdmin, businessController.reactivateBusiness);
 
+// POST /api/v1/admin/businesses/:id/emergency-cancel — Cancelación de emergencia por fuerza mayor
+router.post('/businesses/:id/emergency-cancel', authGuard, requireAdmin, auditController.emergencyCancel);
+
+// --- MODERACIÓN DE RESEÑAS ---
 // GET /api/v1/admin/reviews — Listar reseñas globales para moderación (admin only)
 router.get('/reviews', authGuard, requireAdmin, reviewController.getAllReviewsForAdmin);
 
 // DELETE /api/v1/admin/reviews/:id — Moderar/eliminar reseña inapropiada (admin only)
 router.delete('/reviews/:id', authGuard, requireAdmin, reviewController.deleteReviewByAdmin);
 
+// --- GESTIÓN DE CATEGORÍAS Y RUBROS ---
+// GET /api/v1/admin/categories — Listar categorías completas con métricas
+router.get('/categories', authGuard, requireAdmin, categoryController.getAdminCategories);
+
+// POST /api/v1/admin/categories — Crear nueva categoría
+router.post('/categories', authGuard, requireAdmin, categoryController.createCategory);
+
+// PUT /api/v1/admin/categories/:id — Actualizar categoría existente
+router.put('/categories/:id', authGuard, requireAdmin, categoryController.updateCategory);
+
+// PATCH /api/v1/admin/categories/:id/toggle — Activar/desactivar categoría
+router.patch('/categories/:id/toggle', authGuard, requireAdmin, categoryController.toggleCategoryStatus);
+
+// DELETE /api/v1/admin/categories/:id — Eliminar categoría sin comercios
+router.delete('/categories/:id', authGuard, requireAdmin, categoryController.deleteCategory);
+
+// --- AVISOS Y BANNERS DEL SISTEMA (BROADCAST) ---
+// GET /api/v1/admin/announcements — Listar todos los avisos
+router.get('/announcements', authGuard, requireAdmin, announcementController.getAllAnnouncements);
+
+// POST /api/v1/admin/announcements — Crear nuevo aviso
+router.post('/announcements', authGuard, requireAdmin, announcementController.createAnnouncement);
+
+// PATCH /api/v1/admin/announcements/:id/toggle — Activar o desactivar aviso
+router.patch('/announcements/:id/toggle', authGuard, requireAdmin, announcementController.toggleAnnouncement);
+
+// DELETE /api/v1/admin/announcements/:id — Eliminar aviso
+router.delete('/announcements/:id', authGuard, requireAdmin, announcementController.deleteAnnouncement);
+
+// --- AUDITORÍA DEL SISTEMA (AUDIT TRAIL) ---
+// GET /api/v1/admin/audit-logs — Historial de acciones críticas del sistema
+router.get('/audit-logs', authGuard, requireAdmin, auditController.getAuditLogs);
+
+// --- MÉTRICAS Y REPORTES ---
 // GET /api/v1/admin/stats — Estadísticas globales
 router.get('/stats', authGuard, requireAdmin, adminController.getStats);
 
