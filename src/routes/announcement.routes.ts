@@ -7,3 +7,4 @@ const router = Router();
 router.get('/active', announcementController.getActiveAnnouncement);
 
 export default router;
+
