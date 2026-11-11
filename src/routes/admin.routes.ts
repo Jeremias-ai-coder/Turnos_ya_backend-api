@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { adminController, bugReportController, businessController } from '../container';
+import { adminController, bugReportController, businessController, reviewController } from '../container';
 import { authGuard } from '../middlewares/authGuard';
 import { AppError } from '../middlewares/errorHandler';
 
@@ -29,6 +29,18 @@ router.patch('/businesses/:id/approve', authGuard, requireAdmin, businessControl
 
 // PATCH /api/v1/admin/businesses/:id/reject — Rechazar comercio con motivo
 router.patch('/businesses/:id/reject', authGuard, requireAdmin, businessController.rejectBusiness);
+
+// PATCH /api/v1/admin/businesses/:id/suspend — Suspender comercio con motivo
+router.patch('/businesses/:id/suspend', authGuard, requireAdmin, businessController.suspendBusiness);
+
+// PATCH /api/v1/admin/businesses/:id/reactivate — Reactivar comercio suspendido
+router.patch('/businesses/:id/reactivate', authGuard, requireAdmin, businessController.reactivateBusiness);
+
+// GET /api/v1/admin/reviews — Listar reseñas globales para moderación (admin only)
+router.get('/reviews', authGuard, requireAdmin, reviewController.getAllReviewsForAdmin);
+
+// DELETE /api/v1/admin/reviews/:id — Moderar/eliminar reseña inapropiada (admin only)
+router.delete('/reviews/:id', authGuard, requireAdmin, reviewController.deleteReviewByAdmin);
 
 // GET /api/v1/admin/stats — Estadísticas globales
 router.get('/stats', authGuard, requireAdmin, adminController.getStats);

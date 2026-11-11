@@ -50,7 +50,7 @@ export class BusinessService {
 
     // Notificar a todos los administradores del sistema
     try {
-      const allUsers = await this.userRepo.findAll();
+      const allUsers = (await this.userRepo.findAll()) || [];
       const admins = allUsers.filter(u => u.role === 'administrator');
 
       for (const admin of admins) {
@@ -132,7 +132,7 @@ export class BusinessService {
 
       // Notificar administradores de la corrección
       try {
-        const allUsers = await this.userRepo.findAll();
+        const allUsers = (await this.userRepo.findAll()) || [];
         const admins = allUsers.filter(u => u.role === 'administrator');
         for (const admin of admins) {
           if (this.notificationService) {
@@ -283,6 +283,130 @@ export class BusinessService {
       }
     } catch (err) {
       console.warn('[BUSINESS_SERVICE] Error emitiendo notificación de rechazo:', err);
+    }
+
+    // Invalidar cachés
+    await Promise.all([
+      this.cache.del(`business:detail:${id}`),
+      this.cache.delPattern('businesses:list:*'),
+      this.cache.del('admin:stats')
+    ]);
+
+    return updated;
+  }
+
+  async suspendBusiness(id: number, adminId: number, reason: string) {
+    const business = await this.businessRepo.findById(id);
+    if (!business) {
+      throw new AppError('Negocio no encontrado', 404);
+    }
+
+    const updated = await this.businessRepo.update(id, {
+      status: 'suspended',
+      rejectionReason: reason,
+      reviewedAt: new Date(),
+      reviewedById: adminId
+    });
+
+    const owner = await this.userRepo.findById(business.ownerId);
+
+    // Notificación in-app al dueño con el motivo de suspensión
+    try {
+      if (this.notificationService) {
+        await this.notificationService.createNotification({
+          userId: business.ownerId,
+          type: 'BUSINESS_SUSPENDED',
+          title: 'Comercio suspendido temporalmente',
+          message: `Tu comercio "${business.name}" ha sido suspendido por la administración de Turnos Ya: ${reason}. Durante la suspensión no estará visible en el catálogo ni aceptará reservas.`
+        });
+      }
+
+      // Email al dueño
+      if (owner?.email) {
+        sendEmail({
+          to: owner.email,
+          subject: `Aviso importante: Comercio "${business.name}" suspendido — Turnos Ya`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #fee2e2; border-radius: 12px; background: #ffffff;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 40px;">⚠️</span>
+                <h2 style="color: #dc2626; margin: 8px 0;">Comercio Temporalmente Suspendido</h2>
+              </div>
+              <p>Hola <strong>${owner.name}</strong>,</p>
+              <p>Te informamos que la administración de Turnos Ya ha suspendido temporalmente tu comercio <strong>${business.name}</strong>.</p>
+              <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 16px; border-radius: 8px; color: #991b1b; margin: 16px 0;">
+                <strong>Motivo de la suspensión:</strong><br/>
+                ${reason}
+              </div>
+              <p style="font-size: 14px; color: #64748b;">
+                Mientras se encuentre suspendido, tu negocio no figurará en las búsquedas públicas ni aceptará nuevas citas. Podés contactar a soporte para regularizar la situación.
+              </p>
+            </div>
+          `
+        }).catch(err => console.warn('[EMAIL] Error enviando correo de suspensión:', err));
+      }
+    } catch (err) {
+      console.warn('[BUSINESS_SERVICE] Error emitiendo notificación de suspensión:', err);
+    }
+
+    // Invalidar cachés
+    await Promise.all([
+      this.cache.del(`business:detail:${id}`),
+      this.cache.delPattern('businesses:list:*'),
+      this.cache.del('admin:stats')
+    ]);
+
+    return updated;
+  }
+
+  async reactivateBusiness(id: number, adminId: number) {
+    const business = await this.businessRepo.findById(id);
+    if (!business) {
+      throw new AppError('Negocio no encontrado', 404);
+    }
+
+    const updated = await this.businessRepo.update(id, {
+      status: 'approved',
+      rejectionReason: null,
+      reviewedAt: new Date(),
+      reviewedById: adminId
+    });
+
+    const owner = await this.userRepo.findById(business.ownerId);
+
+    // Notificación in-app al dueño
+    try {
+      if (this.notificationService) {
+        await this.notificationService.createNotification({
+          userId: business.ownerId,
+          type: 'BUSINESS_REACTIVATED',
+          title: '¡Tu comercio ha sido reactivado!',
+          message: `El comercio "${business.name}" ha sido reactivado por administración y vuelve a estar visible en el catálogo para recibir reservas.`
+        });
+      }
+
+      // Email al dueño
+      if (owner?.email) {
+        sendEmail({
+          to: owner.email,
+          subject: `¡Comercio "${business.name}" reactivado con éxito! — Turnos Ya`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+              <div style="text-align: center; margin-bottom: 20px;">
+                <span style="font-size: 40px;">✅</span>
+                <h2 style="color: #10b981; margin: 8px 0;">Comercio Reactivado</h2>
+              </div>
+              <p>Hola <strong>${owner.name}</strong>,</p>
+              <p>Te confirmamos que tu comercio <strong>${business.name}</strong> ha sido reactivado por nuestro equipo de administración.</p>
+              <p style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; color: #166534;">
+                Tu perfil vuelve a estar publicado en el catálogo y listo para agendar turnos normalmente.
+              </p>
+            </div>
+          `
+        }).catch(err => console.warn('[EMAIL] Error enviando correo de reactivación:', err));
+      }
+    } catch (err) {
+      console.warn('[BUSINESS_SERVICE] Error emitiendo notificación de reactivación:', err);
     }
 
     // Invalidar cachés

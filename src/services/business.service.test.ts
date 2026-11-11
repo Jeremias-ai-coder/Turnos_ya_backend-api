@@ -41,7 +41,7 @@ describe('BusinessService (Unit Tests)', () => {
 
       const result = await businessService.getBusinesses(1, 10, 'Barbería');
 
-      expect(mockBusinessRepo.findAll).toHaveBeenCalledWith(0, 10, 'Barbería');
+      expect(mockBusinessRepo.findAll).toHaveBeenCalledWith(0, 10, 'Barbería', 'approved');
       expect(result.data).toHaveLength(2);
       expect(result.meta).toEqual({
         total: 2,
@@ -74,28 +74,28 @@ describe('BusinessService (Unit Tests)', () => {
   });
 
   describe('createBusiness', () => {
-    it('debe crear el negocio y promover al usuario de cliente a dueño (owner)', async () => {
+    it('debe registrar el negocio con estado pendiente de aprobacion', async () => {
       const newBusinessData = { name: 'Mi Nuevo Negocio', address: 'Av. Corrientes 1234' };
-      const createdBusiness = { id: 10, ...newBusinessData, ownerId: 7 };
+      const createdBusiness = { id: 10, ...newBusinessData, ownerId: 7, status: 'pending_approval' };
 
       mockBusinessRepo.create.mockResolvedValue(createdBusiness as any);
       mockUserRepo.findById.mockResolvedValue({ id: 7, role: 'client' } as any);
-      mockUserRepo.update.mockResolvedValue({ id: 7, role: 'owner' } as any);
+      mockUserRepo.findAll.mockResolvedValue([]);
 
       const result = await businessService.createBusiness(7, newBusinessData as any);
 
       expect(mockBusinessRepo.create).toHaveBeenCalledWith(7, newBusinessData);
       expect(mockUserRepo.findById).toHaveBeenCalledWith(7);
-      expect(mockUserRepo.update).toHaveBeenCalledWith(7, { role: 'owner' });
       expect(result).toEqual(createdBusiness);
     });
 
-    it('debe crear el negocio sin alterar el rol si el usuario ya es owner o admin', async () => {
+    it('debe crear el negocio sin alterar el rol inmediatamente', async () => {
       const newBusinessData = { name: 'Segundo Local', address: 'Palermo 500' };
-      const createdBusiness = { id: 11, ...newBusinessData, ownerId: 7 };
+      const createdBusiness = { id: 11, ...newBusinessData, ownerId: 7, status: 'pending_approval' };
 
       mockBusinessRepo.create.mockResolvedValue(createdBusiness as any);
       mockUserRepo.findById.mockResolvedValue({ id: 7, role: 'owner' } as any);
+      mockUserRepo.findAll.mockResolvedValue([]);
 
       const result = await businessService.createBusiness(7, newBusinessData as any);
 
@@ -167,6 +167,38 @@ describe('BusinessService (Unit Tests)', () => {
         statusCode: 404,
         message: 'Negocio no encontrado',
       });
+    });
+  });
+
+  describe('suspendBusiness y reactivateBusiness', () => {
+    it('suspendBusiness debe suspender el comercio y registrar el motivo', async () => {
+      const existing = { id: 20, name: 'Comercio Problemático', ownerId: 12, status: 'approved' };
+      mockBusinessRepo.findById.mockResolvedValue(existing as any);
+      mockBusinessRepo.update.mockResolvedValue({ ...existing, status: 'suspended', rejectionReason: 'Denuncias reiteradas' } as any);
+      mockUserRepo.findById.mockResolvedValue({ id: 12, name: 'Dueño', email: 'owner@test.com' } as any);
+
+      const result = await businessService.suspendBusiness(20, 1, 'Denuncias reiteradas');
+
+      expect(mockBusinessRepo.update).toHaveBeenCalledWith(20, expect.objectContaining({
+        status: 'suspended',
+        rejectionReason: 'Denuncias reiteradas',
+      }));
+      expect(result.status).toBe('suspended');
+    });
+
+    it('reactivateBusiness debe reactivar un comercio suspendido a approved', async () => {
+      const existing = { id: 20, name: 'Comercio Regularizado', ownerId: 12, status: 'suspended' };
+      mockBusinessRepo.findById.mockResolvedValue(existing as any);
+      mockBusinessRepo.update.mockResolvedValue({ ...existing, status: 'approved', rejectionReason: null } as any);
+      mockUserRepo.findById.mockResolvedValue({ id: 12, name: 'Dueño', email: 'owner@test.com' } as any);
+
+      const result = await businessService.reactivateBusiness(20, 1);
+
+      expect(mockBusinessRepo.update).toHaveBeenCalledWith(20, expect.objectContaining({
+        status: 'approved',
+        rejectionReason: null,
+      }));
+      expect(result.status).toBe('approved');
     });
   });
 });

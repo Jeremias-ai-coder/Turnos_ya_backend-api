@@ -46,4 +46,29 @@ export class ReviewService {
       stats: ratingStats
     };
   }
+
+  async getAllReviewsForAdmin(page: number = 1, limit: number = 15, rating?: number, search?: string) {
+    const pagination = getPaginationOptions(page, limit, 50);
+    const [reviews, total] = await this.reviewRepo.findAll({
+      skip: pagination.skip,
+      take: pagination.limit,
+      rating,
+      search
+    });
+
+    return createPaginatedResponse(reviews, total, pagination.page, pagination.limit);
+  }
+
+  async deleteReviewByAdmin(reviewId: number, adminId: number, reason?: string) {
+    const review = await this.reviewRepo.findById(reviewId);
+    if (!review) {
+      throw new AppError('Reseña no encontrada', 404);
+    }
+
+    const deleted = await this.reviewRepo.delete(reviewId);
+    return {
+      message: 'Reseña eliminada / moderada exitosamente por administración',
+      review: deleted
+    };
+  }
 }

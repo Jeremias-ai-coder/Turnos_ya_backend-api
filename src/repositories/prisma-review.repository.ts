@@ -70,4 +70,59 @@ export class PrismaReviewRepository implements IReviewRepository {
       count: aggregations._count.id
     };
   }
+
+  async findById(id: number): Promise<any | null> {
+    return this.prisma.review.findUnique({
+      where: { id },
+      include: {
+        appointment: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            business: { select: { id: true, name: true } },
+            service: { select: { id: true, name: true } }
+          }
+        }
+      }
+    });
+  }
+
+  async findAll(options: { skip: number; take: number; rating?: number; search?: string }): Promise<[any[], number]> {
+    const where: any = {};
+    if (options.rating) {
+      where.rating = options.rating;
+    }
+    if (options.search && options.search.trim()) {
+      const q = options.search.trim();
+      where.OR = [
+        { comment: { contains: q } },
+        { appointment: { business: { name: { contains: q } } } },
+        { appointment: { user: { name: { contains: q } } } }
+      ];
+    }
+
+    return Promise.all([
+      this.prisma.review.findMany({
+        where,
+        include: {
+          appointment: {
+            include: {
+              user: { select: { id: true, name: true, email: true } },
+              business: { select: { id: true, name: true } },
+              service: { select: { id: true, name: true } }
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: options.skip,
+        take: options.take
+      }),
+      this.prisma.review.count({ where })
+    ]);
+  }
+
+  async delete(id: number): Promise<Review> {
+    return this.prisma.review.delete({
+      where: { id }
+    });
+  }
 }
