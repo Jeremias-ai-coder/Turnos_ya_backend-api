@@ -24,8 +24,9 @@ export class ReviewController {
     const businessId = parseInt(req.params.id);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
+    const isAdmin = (req as any).user?.role === 'administrator';
 
-    const result = await this.reviewService.getBusinessReviews(businessId, page, limit);
+    const result = await this.reviewService.getBusinessReviews(businessId, page, limit, isAdmin);
     res.json(result);
   };
 
@@ -39,12 +40,32 @@ export class ReviewController {
     res.json(result);
   };
 
+  hideReview = async (req: Request, res: Response) => {
+    const reviewId = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const adminName = (req as any).user.name || 'Administrador';
+    const reason = req.body?.reason;
+
+    const result = await this.reviewService.hideReviewByAdmin(reviewId, adminId, adminName, reason);
+    res.json(result);
+  };
+
+  unhideReview = async (req: Request, res: Response) => {
+    const reviewId = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const adminName = (req as any).user.name || 'Administrador';
+
+    const result = await this.reviewService.unhideReviewByAdmin(reviewId, adminId, adminName);
+    res.json(result);
+  };
+
   deleteReviewByAdmin = async (req: Request, res: Response) => {
     const reviewId = parseInt(req.params.id);
     const adminId = (req as any).user.id;
+    const adminName = (req as any).user.name || 'Administrador';
     const reason = req.body?.reason;
 
-    const result = await this.reviewService.deleteReviewByAdmin(reviewId, adminId, reason);
+    const result = await this.reviewService.deleteReviewByAdmin(reviewId, adminId, adminName, reason);
     res.json(result);
   };
 }

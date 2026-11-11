@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { businessController, serviceController, scheduleController, reviewController, appointmentController } from '../container';
-import { authGuard } from '../middlewares/authGuard';
+import { authGuard, optionalAuth } from '../middlewares/authGuard';
 
 const router = Router();
 
@@ -27,7 +27,7 @@ router.delete('/:id/schedules/:scheduleId', authGuard, scheduleController.delete
 // Horarios ocupados del negocio para una fecha
 router.get('/:id/busy-slots', appointmentController.getBusySlots);
 
-// Reseñas del negocio
-router.get('/:id/reviews', reviewController.getBusinessReviews);
+// Reseñas del negocio (permite ver ocultas si el solicitante es admin)
+router.get('/:id/reviews', optionalAuth, reviewController.getBusinessReviews);
 
 export default router;

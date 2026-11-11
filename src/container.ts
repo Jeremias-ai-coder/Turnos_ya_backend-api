@@ -57,11 +57,11 @@ export const appointmentService = new AppointmentService(appointmentRepository, 
 export const authService = new AuthService(userRepository);
 export const scheduleService = new ScheduleService(scheduleRepository, businessRepository);
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository, prisma);
-export const reviewService = new ReviewService(reviewRepository, appointmentRepository);
+export const auditService = new AuditService(prisma, notificationService);
+export const reviewService = new ReviewService(reviewRepository, appointmentRepository, prisma, auditService);
 export const categoryService = new CategoryService(prisma);
 export const bugReportService = new BugReportService(bugReportRepository);
 export const announcementService = new AnnouncementService(prisma);
-export const auditService = new AuditService(prisma, notificationService);
 
 // Tareas en segundo plano (Scheduler)
 export const reminderJob = new ReminderJob(notificationService);
