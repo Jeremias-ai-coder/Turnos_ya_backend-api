@@ -452,3 +452,303 @@ export function getAppointmentReminderEmailHtml({
       'Si necesitás reprogramar o cancelar el turno, hacelo cuanto antes desde la plataforma para liberar el lugar a otro cliente.',
   });
 }
+
+/**
+ * Plantilla: Solicitud de Negocio Recibida en Revisión
+ */
+export function getBusinessSubmittedEmailHtml({
+  applicantName,
+  businessName,
+  frontendUrl,
+}: {
+  applicantName: string;
+  businessName: string;
+  frontendUrl: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        Hola, ${applicantName} 👋
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        Recibimos correctamente la solicitud para registrar tu comercio <strong>${businessName}</strong> en Turnos Ya.
+      </p>
+    </div>
+
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #0284c7; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <div style="font-size: 14px; font-weight: 700; color: #0284c7; margin-bottom: 6px;">
+        📋 Estado: En revisión por Auditoría Oficial
+      </div>
+      <div style="font-size: 13px; color: #64748b; line-height: 1.5;">
+        <strong>Tiempo estimado:</strong> 12 a 24 horas hábiles.<br/>
+        El equipo corrobora las redes y canales oficiales ingresados para certificar la veracidad de la ficha antes de publicarla.
+      </div>
+    </div>
+
+    <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+      Apenas el proceso de auditoría finalice, recibirás un correo de confirmación y tu negocio quedará publicado en el catálogo público.
+    </p>
+  `;
+
+  return buildEmailLayout({
+    preheader: `Solicitud de alta recibida para ${businessName} en Turnos Ya.`,
+    badge: '🏢 Registro Comercial',
+    title: '¡Solicitud en Revisión!',
+    subtitle: `Comercio: ${businessName}`,
+    contentHtml,
+    ctaText: 'Ver estado de mi solicitud →',
+    ctaUrl: `${frontendUrl}/dashboard`,
+  });
+}
+
+/**
+ * Plantilla: Negocio Aprobado y Activado
+ */
+export function getBusinessApprovedEmailHtml({
+  ownerName,
+  businessName,
+  frontendUrl,
+}: {
+  ownerName: string;
+  businessName: string;
+  frontendUrl: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        ¡Felicitaciones, ${ownerName}! 🎉
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        Nuestro equipo de administración auditó los datos y aprobó el alta oficial de <strong>${businessName}</strong>.
+      </p>
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <div style="font-size: 14px; font-weight: 700; color: #166534; margin-bottom: 8px;">
+        ✓ Tu comercio ya está activo
+      </div>
+      <div style="font-size: 13px; color: #15803d; line-height: 1.5;">
+        • Tu ficha pública ya se encuentra disponible en el catálogo de Turnos Ya.<br/>
+        • Tus clientes pueden reservar turnos, ver tus horarios y seguir tus novedades.<br/>
+        • Podés cargar servicios, gestionar tu agenda y enviar promociones desde tu panel.
+      </div>
+    </div>
+  `;
+
+  return buildEmailLayout({
+    preheader: `¡Tu negocio "${businessName}" fue aprobado y ya está disponible en Turnos Ya!`,
+    badge: '✨ Negocio Verificado',
+    title: '¡Tu negocio fue aprobado!',
+    subtitle: `"${businessName}" ya está disponible para reservas`,
+    contentHtml,
+    ctaText: 'Ir a mi Panel de Control →',
+    ctaUrl: `${frontendUrl}/dashboard`,
+  });
+}
+
+/**
+ * Plantilla: Negocio Observado
+ */
+export function getBusinessObservedEmailHtml({
+  ownerName,
+  businessName,
+  reason,
+  frontendUrl,
+}: {
+  ownerName: string;
+  businessName: string;
+  reason: string;
+  frontendUrl: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        Hola, ${ownerName}
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        El equipo de auditoría revisó la solicitud de alta de <strong>${businessName}</strong> y requiere algunas modificaciones o aclaraciones antes de poder habilitarlo.
+      </p>
+    </div>
+
+    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <div style="font-size: 14px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">
+        Motivo de la observación:
+      </div>
+      <div style="font-size: 14px; color: #b91c1c; line-height: 1.5;">
+        ${reason}
+      </div>
+    </div>
+
+    <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+      Podés ingresar a tu panel de control para corregir los datos o adjuntar las evidencias solicitadas y reenviar la ficha a revisión.
+    </p>
+  `;
+
+  return buildEmailLayout({
+    preheader: `Observaciones sobre tu solicitud para "${businessName}" en Turnos Ya.`,
+    badge: '⚠️ Solicitud Observada',
+    title: 'Modificaciones Requeridas',
+    subtitle: `Solicitud de "${businessName}"`,
+    contentHtml,
+    ctaText: 'Corregir y reenviar solicitud →',
+    ctaUrl: `${frontendUrl}/dashboard`,
+  });
+}
+
+/**
+ * Plantilla: Negocio Suspendido
+ */
+export function getBusinessSuspendedEmailHtml({
+  ownerName,
+  businessName,
+  reason,
+}: {
+  ownerName: string;
+  businessName: string;
+  reason: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        Estimado/a ${ownerName},
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        Te informamos que la administración de Turnos Ya ha suspendido temporalmente tu comercio <strong>${businessName}</strong>.
+      </p>
+    </div>
+
+    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <div style="font-size: 14px; font-weight: 700; color: #991b1b; margin-bottom: 6px;">
+        Motivo de la suspensión:
+      </div>
+      <div style="font-size: 14px; color: #b91c1c; line-height: 1.5;">
+        ${reason}
+      </div>
+    </div>
+
+    <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+      Durante el período de suspensión, tu negocio no estará visible en el catálogo público ni aceptará nuevas reservas. Si considerás que se trata de un error o deseás regularizar la situación, podés contactar al equipo de soporte.
+    </p>
+  `;
+
+  return buildEmailLayout({
+    preheader: `Aviso importante: El comercio "${businessName}" ha sido suspendido temporalmente.`,
+    badge: '⚠️ Aviso de Administración',
+    title: 'Comercio Suspendido',
+    subtitle: `"${businessName}"`,
+    contentHtml,
+  });
+}
+
+/**
+ * Plantilla: Negocio Reactivado
+ */
+export function getBusinessReactivatedEmailHtml({
+  ownerName,
+  businessName,
+  frontendUrl,
+}: {
+  ownerName: string;
+  businessName: string;
+  frontendUrl: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        ¡Hola de nuevo, ${ownerName}! 👋
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        Te confirmamos que tu comercio <strong>${businessName}</strong> ha sido <strong>reactivado</strong> por nuestro equipo de administración.
+      </p>
+    </div>
+
+    <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+      <div style="font-size: 14px; font-weight: 700; color: #166534; margin-bottom: 6px;">
+        ✓ Comercio nuevamente visible
+      </div>
+      <div style="font-size: 13px; color: #15803d; line-height: 1.5;">
+        Tu perfil público vuelve a estar activo en el catálogo y listo para agendar turnos normalmente con tus clientes.
+      </div>
+    </div>
+  `;
+
+  return buildEmailLayout({
+    preheader: `¡Tu comercio "${businessName}" ha sido reactivado y vuelve a aceptar turnos!`,
+    badge: '✅ Comercio Habilitado',
+    title: '¡Comercio Reactivado!',
+    subtitle: `"${businessName}" vuelve a estar activo en Turnos Ya`,
+    contentHtml,
+    ctaText: 'Ir a mi Panel de Control →',
+    ctaUrl: `${frontendUrl}/dashboard`,
+  });
+}
+
+/**
+ * Plantilla: Cancelación por Fuerza Mayor
+ */
+export function getEmergencyCancellationEmailHtml({
+  clientName,
+  businessName,
+  serviceName,
+  dateFormatted,
+  reason,
+  frontendUrl,
+}: {
+  clientName: string;
+  businessName: string;
+  serviceName: string;
+  dateFormatted: string;
+  reason: string;
+  frontendUrl: string;
+}): string {
+  const contentHtml = `
+    <div style="margin-bottom: 20px;">
+      <h2 style="margin: 0 0 6px 0; font-size: 20px; font-weight: 700; color: #0f172a;">
+        Hola, ${clientName}
+      </h2>
+      <p style="margin: 0; font-size: 15px; color: #475569; line-height: 1.6;">
+        Te informamos que debido a una situación de fuerza mayor o imprevisto en el local <strong>${businessName}</strong>, tu cita programada ha debido ser cancelada.
+      </p>
+    </div>
+
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px 20px; margin: 20px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td style="padding: 4px 0; font-size: 14px; color: #64748b;">Comercio:</td>
+          <td align="right" style="padding: 4px 0; font-size: 14px; font-weight: 700; color: #0f172a;">${businessName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-size: 14px; color: #64748b;">Servicio:</td>
+          <td align="right" style="padding: 4px 0; font-size: 14px; font-weight: 600; color: #0284c7;">${serviceName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 4px 0; font-size: 14px; color: #64748b;">Fecha agendada:</td>
+          <td align="right" style="padding: 4px 0; font-size: 14px; font-weight: 700; color: #334155;">${dateFormatted}</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 10px; padding: 16px 18px; margin: 20px 0;">
+      <div style="font-size: 13px; font-weight: 700; color: #991b1b; margin-bottom: 4px;">
+        Motivo comunicado por el local:
+      </div>
+      <div style="font-size: 14px; color: #b91c1c; line-height: 1.5;">
+        ${reason}
+      </div>
+    </div>
+
+    <p style="font-size: 14px; color: #475569; line-height: 1.5;">
+      Lamentamos los inconvenientes ocasionados. Ya podés volver a ingresar a la plataforma para reprogramar tu cita en otra fecha u horario disponible.
+    </p>
+  `;
+
+  return buildEmailLayout({
+    preheader: `Aviso urgente: Tu turno en ${businessName} para ${serviceName} ha sido cancelado por imprevistos.`,
+    badge: '⚠️ Aviso Urgente de Turno',
+    title: 'Cancelación por Fuerza Mayor',
+    subtitle: `${businessName} • ${dateFormatted}`,
+    contentHtml,
+    ctaText: 'Reprogramar mi turno →',
+    ctaUrl: `${frontendUrl}/my-appointments`,
+  });
+}

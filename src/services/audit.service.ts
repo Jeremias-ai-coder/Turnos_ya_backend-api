@@ -3,6 +3,7 @@ import { CacheService, cacheService } from './cache.service';
 import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
 import { NotificationService } from './notification.service';
+import { getEmergencyCancellationEmailHtml } from '../utils/emailTemplates';
 
 export interface AuditLogEntry {
   id: number;
@@ -203,23 +204,18 @@ export class AuditService {
         }
 
         if (apt.user.email) {
+          const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
           sendEmail({
             to: apt.user.email,
             subject: `Aviso urgente: Turno cancelado por fuerza mayor en ${business.name}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #fee2e2; border-radius: 12px; background: #ffffff;">
-                <h2 style="color: #dc2626; margin-top: 0;">Aviso de Cancelación de Emergencia</h2>
-                <p>Hola <strong>${apt.user.name}</strong>,</p>
-                <p>Te informamos que debido a una situación de fuerza mayor en el local <strong>${business.name}</strong>, tu cita programada para el <strong>${dateFormatted}</strong> para el servicio <strong>${apt.service.name}</strong> ha tenido que ser cancelada.</p>
-                <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 16px; border-radius: 8px; color: #991b1b; margin: 16px 0;">
-                  <strong>Motivo comunicado:</strong><br/>
-                  ${reason}
-                </div>
-                <p style="font-size: 14px; color: #64748b;">
-                  Te pedimos disculpas por los inconvenientes ocasionados. Podés volver a ingresar a Turnos Ya para reservar en otra fecha u horario.
-                </p>
-              </div>
-            `
+            html: getEmergencyCancellationEmailHtml({
+              clientName: apt.user.name,
+              businessName: business.name,
+              serviceName: apt.service.name,
+              dateFormatted,
+              reason,
+              frontendUrl,
+            }),
           }).catch(err => console.warn('[EMAIL] Error enviando correo de cancelación de emergencia:', err));
         }
       } catch (err) {

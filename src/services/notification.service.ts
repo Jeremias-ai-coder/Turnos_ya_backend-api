@@ -4,6 +4,7 @@ import { INotificationRepository, CreateNotificationDTO } from '../interfaces/no
 import { getHoursUntilAppointment, formatTimeHelper, formatDateHelper } from '../utils/date';
 import { AppError } from '../middlewares/errorHandler';
 import { sendEmail } from './email.service';
+import { getAppointmentReminderEmailHtml } from '../utils/emailTemplates';
 
 export class NotificationService {
   private sseClients = new Map<number, Set<Response>>();
@@ -144,29 +145,17 @@ export class NotificationService {
 
           // 2. Notificación por correo electrónico si está habilitado
           if (app.user?.email && app.user.emailNotifications !== false) {
+            const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
             sendEmail({
               to: app.user.email,
               subject: `Recordatorio: tu turno en ${businessName} es en 1 hora - Turnos Ya`,
-              html: `
-                <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-                  <div style="text-align: center; margin-bottom: 20px;">
-                    <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
-                    <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Recordatorio de turno</p>
-                  </div>
-                  <p style="font-size: 15px; color: #1e293b;">Hola <strong>${app.user.name}</strong>,</p>
-                  <p style="font-size: 14px; color: #475569; line-height: 1.5;">
-                    Te recordamos que tienes una cita programada para dentro de aproximadamente 1 hora:
-                  </p>
-                  <div style="background: #f8fafc; border-left: 4px solid #009ee3; padding: 14px 16px; margin: 18px 0; border-radius: 4px;">
-                    <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>Negocio:</strong> ${businessName}</p>
-                    <p style="margin: 0 0 6px 0; font-size: 14px;"><strong>Servicio:</strong> ${serviceName}</p>
-                    <p style="margin: 0; font-size: 14px;"><strong>Hora:</strong> ${timeFormatted} hs</p>
-                  </div>
-                  <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">
-                    ¡Te esperamos puntual! Si necesitas cancelar o reprogramar, ingresa a tu panel de Turnos Ya.
-                  </p>
-                </div>
-              `,
+              html: getAppointmentReminderEmailHtml({
+                clientName: app.user.name,
+                businessName,
+                serviceName,
+                timeFormatted,
+                frontendUrl,
+              }),
             }).catch(err => console.error('[EMAIL] Error enviando email de recordatorio:', err));
           }
 

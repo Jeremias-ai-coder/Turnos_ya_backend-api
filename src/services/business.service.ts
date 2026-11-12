@@ -7,6 +7,13 @@ import { getPaginationOptions, createPaginatedResponse } from '../utils/paginati
 import { CacheService, cacheService } from './cache.service';
 import { sendEmail } from './email.service';
 import { AuditService } from './audit.service';
+import {
+  getBusinessSubmittedEmailHtml,
+  getBusinessApprovedEmailHtml,
+  getBusinessObservedEmailHtml,
+  getBusinessSuspendedEmailHtml,
+  getBusinessReactivatedEmailHtml,
+} from '../utils/emailTemplates';
 
 export class BusinessService {
   constructor(
@@ -78,22 +85,15 @@ export class BusinessService {
 
       // Email al solicitante
       if (applicant?.email) {
+        const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
         sendEmail({
           to: applicant.email,
           subject: `Solicitud de alta recibida: ${business.name} — Turnos Ya`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; borderRadius: 12px;">
-              <h2 style="color: #0284c7; margin-top: 0;">¡Recibimos tu solicitud de alta!</h2>
-              <p>Hola <strong>${applicant.name}</strong>,</p>
-              <p>Tu solicitud para registrar el comercio <strong>${business.name}</strong> en Turnos Ya ha sido recibida correctamente.</p>
-              <p style="background: #f8fafc; padding: 16px; border-left: 4px solid #0284c7; border-radius: 6px;">
-                <strong>Estado:</strong> En revisión por administración<br/>
-                <strong>Tiempo estimado:</strong> 12 a 24 horas hábiles.
-              </p>
-              <p>Revisaremos las evidencias y datos proporcionados para garantizar la veracidad de la información y te notificaremos apenas esté aprobado.</p>
-              <p style="font-size: 0.88rem; color: #64748b; margin-top: 24px;">Equipo de Verificación de Turnos Ya</p>
-            </div>
-          `
+          html: getBusinessSubmittedEmailHtml({
+            applicantName: applicant.name,
+            businessName: business.name,
+            frontendUrl,
+          }),
         }).catch(err => console.warn('[EMAIL] Error enviando correo de confirmación de solicitud:', err));
       }
     } catch (err) {
@@ -201,28 +201,15 @@ export class BusinessService {
 
       // Email al dueño
       if (owner?.email) {
+        const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
         sendEmail({
           to: owner.email,
           subject: `¡Tu negocio "${business.name}" ha sido aprobado! — Turnos Ya`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px;">
-              <div style="text-align: center; margin-bottom: 20px;">
-                <span style="font-size: 40px;">🎉</span>
-                <h2 style="color: #10b981; margin: 8px 0;">¡Negocio Verificado y Aprobado!</h2>
-              </div>
-              <p>Hola <strong>${owner.name}</strong>,</p>
-              <p>Nos alegra informarte que nuestro equipo de administración ha revisado las evidencias y aprobado el alta de tu comercio <strong>${business.name}</strong>.</p>
-              <p style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; color: #166534;">
-                ✓ Tu perfil público ya está disponible en el catálogo.<br/>
-                ✓ Tus clientes ahora pueden encontrar tus servicios y agendar turnos.
-              </p>
-              <div style="text-align: center; margin-top: 24px;">
-                <a href="https://turnosyapp.vercel.app/dashboard" style="display: inline-block; background: #0284c7; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-                  Ir a mi Panel de Control
-                </a>
-              </div>
-            </div>
-          `
+          html: getBusinessApprovedEmailHtml({
+            ownerName: owner.name,
+            businessName: business.name,
+            frontendUrl,
+          }),
         }).catch(err => console.warn('[EMAIL] Error enviando correo de aprobación:', err));
       }
     } catch (err) {
@@ -279,26 +266,16 @@ export class BusinessService {
 
       // Email al dueño
       if (owner?.email) {
+        const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
         sendEmail({
           to: owner.email,
           subject: `Observaciones sobre tu solicitud de negocio "${business.name}" — Turnos Ya`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px;">
-              <h2 style="color: #dc2626; margin-top: 0;">Observaciones sobre tu solicitud</h2>
-              <p>Hola <strong>${owner.name}</strong>,</p>
-              <p>El equipo de verificación revisó la solicitud de alta para <strong>${business.name}</strong> y encontró algunos puntos que requieren tu atención:</p>
-              <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 16px; border-radius: 6px; margin: 16px 0; color: #991b1b;">
-                <strong>Motivo de la observación:</strong><br/>
-                ${reason}
-              </div>
-              <p>Podés ingresar a tu panel de control para actualizar los datos o evidencias solicitadas y reenviar la solicitud a revisión.</p>
-              <div style="text-align: center; margin-top: 24px;">
-                <a href="https://turnosyapp.vercel.app/dashboard" style="display: inline-block; background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">
-                  Corregir y Reenviar Solicitud
-                </a>
-              </div>
-            </div>
-          `
+          html: getBusinessObservedEmailHtml({
+            ownerName: owner.name,
+            businessName: business.name,
+            reason,
+            frontendUrl,
+          }),
         }).catch(err => console.warn('[EMAIL] Error enviando correo de rechazo:', err));
       }
     } catch (err) {
@@ -358,23 +335,11 @@ export class BusinessService {
         sendEmail({
           to: owner.email,
           subject: `Aviso importante: Comercio "${business.name}" suspendido — Turnos Ya`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #fee2e2; border-radius: 12px; background: #ffffff;">
-              <div style="text-align: center; margin-bottom: 20px;">
-                <span style="font-size: 40px;">⚠️</span>
-                <h2 style="color: #dc2626; margin: 8px 0;">Comercio Temporalmente Suspendido</h2>
-              </div>
-              <p>Hola <strong>${owner.name}</strong>,</p>
-              <p>Te informamos que la administración de Turnos Ya ha suspendido temporalmente tu comercio <strong>${business.name}</strong>.</p>
-              <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 16px; border-radius: 8px; color: #991b1b; margin: 16px 0;">
-                <strong>Motivo de la suspensión:</strong><br/>
-                ${reason}
-              </div>
-              <p style="font-size: 14px; color: #64748b;">
-                Mientras se encuentre suspendido, tu negocio no figurará en las búsquedas públicas ni aceptará nuevas citas. Podés contactar a soporte para regularizar la situación.
-              </p>
-            </div>
-          `
+          html: getBusinessSuspendedEmailHtml({
+            ownerName: owner.name,
+            businessName: business.name,
+            reason,
+          }),
         }).catch(err => console.warn('[EMAIL] Error enviando correo de suspensión:', err));
       }
     } catch (err) {
@@ -431,22 +396,15 @@ export class BusinessService {
 
       // Email al dueño
       if (owner?.email) {
+        const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
         sendEmail({
           to: owner.email,
           subject: `¡Comercio "${business.name}" reactivado con éxito! — Turnos Ya`,
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-              <div style="text-align: center; margin-bottom: 20px;">
-                <span style="font-size: 40px;">✅</span>
-                <h2 style="color: #10b981; margin: 8px 0;">Comercio Reactivado</h2>
-              </div>
-              <p>Hola <strong>${owner.name}</strong>,</p>
-              <p>Te confirmamos que tu comercio <strong>${business.name}</strong> ha sido reactivado por nuestro equipo de administración.</p>
-              <p style="background: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 8px; color: #166534;">
-                Tu perfil vuelve a estar publicado en el catálogo y listo para agendar turnos normalmente.
-              </p>
-            </div>
-          `
+          html: getBusinessReactivatedEmailHtml({
+            ownerName: owner.name,
+            businessName: business.name,
+            frontendUrl,
+          }),
         }).catch(err => console.warn('[EMAIL] Error enviando correo de reactivación:', err));
       }
     } catch (err) {
