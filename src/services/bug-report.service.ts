@@ -1,12 +1,14 @@
-import { BugReportStatus } from '@prisma/client';
+import { BugReportStatus, PrismaClient } from '@prisma/client';
 import { PrismaBugReportRepository, CreateBugReportDTO } from '../repositories/prisma-bug-report.repository';
 import { AppError } from '../middlewares/errorHandler';
 import { NotificationService } from './notification.service';
+import { prisma as defaultPrisma } from '../config/prisma';
 
 export class BugReportService {
   constructor(
     private bugReportRepository: PrismaBugReportRepository,
-    private notificationService?: NotificationService
+    private notificationService?: NotificationService,
+    private prisma: PrismaClient = defaultPrisma
   ) {}
 
   async createReport(data: CreateBugReportDTO) {
@@ -20,7 +22,7 @@ export class BugReportService {
       throw new AppError('Los pasos para reproducir el error son obligatorios', 400);
     }
 
-    return this.bugReportRepository.create({
+    const created = await this.bugReportRepository.create({
       userId: data.userId,
       section: data.section.trim(),
       summary: data.summary.trim(),
@@ -28,6 +30,35 @@ export class BugReportService {
       deviceInfo: data.deviceInfo?.trim() || undefined,
       pageUrl: data.pageUrl?.trim() || undefined,
     });
+
+    if (this.notificationService) {
+      try {
+        const admins = await this.prisma.user.findMany({
+          where: { role: 'administrator', deletedAt: null },
+          select: { id: true }
+        });
+        const cleanSection = data.section.trim();
+        const title =
+          cleanSection === 'SOLICITUD_RUBRO'
+            ? 'Nueva solicitud de rubro comercial'
+            : cleanSection === 'MODERACION_RESENA'
+            ? 'Nuevo reclamo de moderación de reseña'
+            : 'Nuevo ticket de soporte técnico';
+
+        for (const admin of admins) {
+          await this.notificationService.createNotification({
+            userId: admin.id,
+            title,
+            message: `Ticket #${created.id}: ${data.summary.trim()}`,
+            type: 'ADMIN_NEW_TICKET'
+          });
+        }
+      } catch (err) {
+        console.warn('[BUG_REPORT] Error notificando a administradores:', err);
+      }
+    }
+
+    return created;
   }
 
   async getAllReports(options: { page?: number; limit?: number; status?: string }) {
@@ -80,11 +111,18 @@ export class BugReportService {
       const statusText = statusLabels[status] || status;
       const notesText = adminNotes?.trim() ? ` Respuesta de administración: "${adminNotes.trim()}"` : '';
 
+      const notifType =
+        existing.section === 'SOLICITUD_RUBRO'
+          ? 'RUBRO_TICKET_UPDATED'
+          : existing.section === 'MODERACION_RESENA'
+          ? 'RESENA_TICKET_UPDATED'
+          : 'TICKET_UPDATED';
+
       await this.notificationService.createNotification({
         userId: existing.userId,
         title: `Actualización de tu solicitud #${id}`,
         message: `Tu ticket "${existing.summary}" pasó al estado: ${statusText}.${notesText}`,
-        type: 'SYSTEM_ANNOUNCEMENT'
+        type: notifType
       }).catch(err => console.error('[BUG_REPORT] Error enviando notificación al creador del ticket:', err));
     }
 

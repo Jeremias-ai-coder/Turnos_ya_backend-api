@@ -297,13 +297,13 @@ export class AppointmentService {
       const clientName = appointment.user?.name || 'Cliente';
       const reasonText = reason ? ` Motivo: ${reason}` : '';
 
-      // 1. Notificación al Owner: aviso de cancelación
+      // 1. Notificación al Owner: aviso de cancelación en su agenda
       if (appointment.business?.ownerId) {
         await this.notificationService.createNotification({
           userId: appointment.business.ownerId,
           title: 'Turno cancelado',
-          message: `El turno de ${clientName} para "${serviceName}" el ${dateFormatted} a las ${timeFormatted} hs fue cancelado.${reasonText}`,
-          type: 'APPOINTMENT_CANCELLED'
+          message: `El turno de ${clientName} para "${serviceName}" en "${businessName}" el ${dateFormatted} a las ${timeFormatted} hs fue cancelado.${reasonText}`,
+          type: 'BOOKING_CANCELLED'
         });
       }
 
@@ -365,8 +365,8 @@ export class AppointmentService {
       await this.notificationService.createNotification({
         userId: appointment.userId,
         title: 'Turno completado',
-        message: `Tu turno para "${serviceName}" en ${businessName} ha sido marcado como completado. ¡Gracias por tu visita!`,
-        type: 'APPOINTMENT_CONFIRMED'
+        message: `Tu turno para "${serviceName}" en ${businessName} ha sido marcado como completado. ¡Gracias por tu visita! Podés dejar tu calificación en Mis Turnos.`,
+        type: 'APPOINTMENT_COMPLETED'
       }).catch(err => console.error('[APPOINTMENT] Error al notificar completado:', err));
     } else if (status === 'CANCELLED') {
       await this.triggerCancellationNotifications(appointment, userId).catch(err => console.error('[APPOINTMENT] Error al notificar cancelación:', err));

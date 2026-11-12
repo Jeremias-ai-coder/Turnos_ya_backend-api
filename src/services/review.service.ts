@@ -5,6 +5,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
 import { prisma as defaultPrisma } from '../config/prisma';
 import { AuditService } from './audit.service';
+import { NotificationService } from './notification.service';
 import { cacheService } from './cache.service';
 
 export class ReviewService {
@@ -15,6 +16,7 @@ export class ReviewService {
     private appointmentRepo: IAppointmentRepository,
     private prisma: PrismaClient = defaultPrisma,
     private auditService?: AuditService,
+    private notificationService?: NotificationService,
     private cache = cacheService
   ) {}
 
@@ -72,6 +74,18 @@ export class ReviewService {
 
     const created = await this.reviewRepo.create(appointmentId, data);
     this.cache.delPattern(`business:${appointment.businessId}:*`);
+
+    if (this.notificationService && appointment.business?.ownerId) {
+      const clientName = appointment.user?.name || 'Un cliente';
+      const businessName = appointment.business?.name || 'tu comercio';
+      await this.notificationService.createNotification({
+        userId: appointment.business.ownerId,
+        title: 'Nueva opinión recibida',
+        message: `${clientName} calificó con ${data.rating} ★ su atención en "${businessName}".`,
+        type: 'NEW_REVIEW'
+      }).catch(err => console.warn('[REVIEWS] Error notificando nueva reseña al dueño:', err));
+    }
+
     return created;
   }
 
