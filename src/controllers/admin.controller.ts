@@ -12,13 +12,15 @@ export class AdminController {
   updateUserRole = async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     const { role } = req.body;
-    const result = await this.adminService.updateUserRole(id, role);
+    const executorId = (req as any).user?.id;
+    const result = await this.adminService.updateUserRole(id, role, executorId);
     res.json(result);
   };
 
   deleteUser = async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
-    const result = await this.adminService.deleteUser(id);
+    const executorId = (req as any).user?.id;
+    const result = await this.adminService.deleteUser(id, executorId);
     res.json(result);
   };
 

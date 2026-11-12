@@ -5,6 +5,17 @@ import { AppError } from '../middlewares/errorHandler';
 import { Role, PrismaClient } from '@prisma/client';
 import { CacheService, cacheService } from './cache.service';
 
+export const ROOT_ADMIN_EMAILS = [
+  'turnosyapp@gmail.com',
+  'jeremiascollaud@gmail.com',
+  'jeremiascoll@gmail.com',
+];
+
+export function isRootAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  return ROOT_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
 export class AdminService {
   constructor(
     private userRepo: IUserRepository,
@@ -19,17 +30,36 @@ export class AdminService {
     return { data: users, meta: { total: users.length } };
   }
 
-  async updateUserRole(id: number, role: string) {
-    if (role === 'administrator') {
-      throw new AppError('Por motivos de seguridad, el rol de Administrador no puede ser asignado desde el panel', 403);
+  async updateUserRole(id: number, role: string, executorId?: number) {
+    const targetUser = await this.userRepo.findById(id);
+    if (!targetUser) {
+      throw new AppError('Usuario no encontrado', 404);
     }
-    if (!['client', 'owner'].includes(role)) {
+
+    // 1. Inmunidad de la Cuenta Raíz: su rol no puede ser alterado bajo ninguna circunstancia
+    if (isRootAdminEmail(targetUser.email)) {
+      throw new AppError('El rol de la Cuenta Raíz del sistema es inmutable y está protegido contra cambios de privilegios.', 403);
+    }
+
+    // 2. Solo la Cuenta Raíz puede promover o democionar administradores
+    let isExecutorRoot = false;
+    if (executorId) {
+      const executor = await this.userRepo.findById(executorId);
+      isExecutorRoot = isRootAdminEmail(executor?.email);
+    }
+
+    if (role === 'administrator') {
+      if (!isExecutorRoot) {
+        throw new AppError('Solo el Administrador Principal (Cuenta Raíz) puede asignar el rol de Administrador.', 403);
+      }
+    } else if (!['client', 'owner'].includes(role)) {
       throw new AppError('Rol inválido. Sólo se puede alternar entre Cliente y Dueño', 400);
     }
-    const targetUser = await this.userRepo.findById(id);
-    if (targetUser?.role === 'administrator') {
-      throw new AppError('El rol de un Administrador del Sistema está protegido y no puede ser modificado', 403);
+
+    if (targetUser.role === 'administrator' && !isExecutorRoot) {
+      throw new AppError('Solo el Administrador Principal (Cuenta Raíz) puede modificar el rol de un Administrador.', 403);
     }
+
     const user = await this.userRepo.update(id, { role: role as Role });
 
     // Invalidar estadísticas de roles cacheadas
@@ -38,7 +68,35 @@ export class AdminService {
     return { id: user.id, name: user.name, role: user.role };
   }
 
-  async deleteUser(id: number) {
+  async deleteUser(id: number, executorId?: number) {
+    const targetUser = await this.userRepo.findById(id);
+    if (!targetUser) {
+      throw new AppError('Usuario no encontrado', 404);
+    }
+
+    // 1. Inmunidad Absoluta de la Cuenta Raíz / SuperAdmin
+    if (isRootAdminEmail(targetUser.email)) {
+      throw new AppError('La Cuenta Raíz del sistema es inmutable y está estrictamente protegida contra eliminación.', 403);
+    }
+
+    // 2. Nadie puede auto-eliminarse
+    if (executorId && executorId === id) {
+      throw new AppError('No puedes eliminar tu propia cuenta de administrador.', 400);
+    }
+
+    // 3. Jerarquía de Privilegios: Si el usuario a eliminar es un Administrador,
+    // únicamente la Cuenta Raíz (SuperAdmin) tiene autorización para eliminarlo.
+    if (targetUser.role === 'administrator') {
+      let isExecutorRoot = false;
+      if (executorId) {
+        const executor = await this.userRepo.findById(executorId);
+        isExecutorRoot = isRootAdminEmail(executor?.email);
+      }
+      if (!isExecutorRoot) {
+        throw new AppError('Solo el Administrador Principal (Cuenta Raíz) tiene autorización para eliminar a otros administradores.', 403);
+      }
+    }
+
     await this.userRepo.delete(id);
     await this.cache.del('admin:stats');
     return { message: 'Usuario eliminado correctamente' };
@@ -73,53 +131,48 @@ export class AdminService {
           try {
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
-            const startOfToday = new Date(`${todayStr}T00:00:00.000Z`);
-            const endOfToday = new Date(`${todayStr}T23:59:59.999Z`);
 
-            const [pendingBizCount, todayCount, pendingReportsCount, aptStatuses, recentApts, rUsers] = await Promise.all([
-              this.prisma.business.count({ where: { status: "pending_approval" } }),
+            const [todayCount, bugCount, pendingBizCount, statusGroups, appointments, users] = await Promise.all([
               this.prisma.appointment.count({
-                where: {
-                  date: { gte: startOfToday, lte: endOfToday }
-                }
+                where: { date: todayStr },
               }),
               this.prisma.bugReport.count({
-                where: { status: 'PENDING' }
+                where: { status: 'PENDING' },
+              }),
+              this.prisma.business.count({
+                where: { status: 'pending_approval' },
               }),
               this.prisma.appointment.groupBy({
                 by: ['status'],
-                _count: { status: true }
+                _count: { status: true },
               }),
               this.prisma.appointment.findMany({
                 take: 5,
-                orderBy: [{ date: 'desc' }, { time: 'desc' }],
+                orderBy: { createdAt: 'desc' },
                 include: {
-                  user: { select: { id: true, name: true, email: true } },
                   business: { select: { id: true, name: true } },
-                  service: { select: { id: true, name: true, price: true } }
-                }
+                  user: { select: { id: true, name: true, email: true } },
+                },
               }),
               this.prisma.user.findMany({
                 take: 5,
-                where: { deletedAt: null },
                 orderBy: { id: 'desc' },
-                select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true }
-              })
+                select: { id: true, name: true, email: true, role: true },
+              }),
             ]);
 
             todayAppointments = todayCount;
-            pendingBugReports = pendingReportsCount;
+            pendingBugReports = bugCount;
             pendingBusinesses = pendingBizCount;
-            recentAppointments = recentApts;
-            recentUsers = rUsers;
-
-            aptStatuses.forEach((item: any) => {
-              if (item.status in appointmentsByStatus) {
-                appointmentsByStatus[item.status] = item._count.status;
+            statusGroups.forEach((sg: any) => {
+              if (appointmentsByStatus[sg.status] !== undefined) {
+                appointmentsByStatus[sg.status] = sg._count.status;
               }
             });
-          } catch (err) {
-            console.warn('[ADMIN] Error al calcular estadísticas avanzadas:', err);
+            recentAppointments = appointments;
+            recentUsers = users;
+          } catch {
+            // Si el cliente prisma no está listo, se mantienen los valores por defecto
           }
         }
 
@@ -135,16 +188,15 @@ export class AdminService {
           pendingBusinesses,
           appointmentsByStatus,
           recentAppointments,
-          recentUsers
+          recentUsers,
         };
       },
-      60 // 60 segundos TTL
+      30
     );
   }
 
   async getAllAppointments() {
-    const appointments = await this.appointmentRepo.findAll(100);
-    return { data: appointments, meta: { total: appointments.length } };
+    return this.appointmentRepo.findAll();
   }
 
   getCacheStats() {
@@ -153,6 +205,6 @@ export class AdminService {
 
   async clearCache() {
     await this.cache.clear();
-    return { message: 'Caché global purgada exitosamente' };
+    return { message: 'Caché invalidada completamente' };
   }
 }
