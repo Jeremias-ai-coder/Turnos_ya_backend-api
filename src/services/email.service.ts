@@ -48,6 +48,11 @@ export async function sendEmail({
   subject: string;
   html: string;
 }): Promise<{ sent: boolean; reason?: string; error?: string }> {
+  // En entorno de tests automáticos (Jest), no enviar correos reales para evitar rebotes y cuota SMTP
+  if (process.env.NODE_ENV === 'test') {
+    return { sent: true };
+  }
+
   const transport = getEmailTransport();
   const fromAddress = process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `Turnos Ya <${process.env.EMAIL_USER}>` : '');
 
