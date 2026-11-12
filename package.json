@@ -37,6 +37,7 @@
     "nodemailer": "^10.0.11",
     "otplib": "^13.5.0",
     "qrcode": "^1.5.4",
+    "resend": "^6.38.0",
     "zod": "^3.21.4"
   },
   "devDependencies": {
