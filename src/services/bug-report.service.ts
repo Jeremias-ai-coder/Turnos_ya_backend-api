@@ -1,9 +1,13 @@
 import { BugReportStatus } from '@prisma/client';
 import { PrismaBugReportRepository, CreateBugReportDTO } from '../repositories/prisma-bug-report.repository';
 import { AppError } from '../middlewares/errorHandler';
+import { NotificationService } from './notification.service';
 
 export class BugReportService {
-  constructor(private bugReportRepository: PrismaBugReportRepository) {}
+  constructor(
+    private bugReportRepository: PrismaBugReportRepository,
+    private notificationService?: NotificationService
+  ) {}
 
   async createReport(data: CreateBugReportDTO) {
     if (!data.section || !data.section.trim()) {
@@ -64,6 +68,26 @@ export class BugReportService {
       throw new AppError('Reporte de error no encontrado', 404);
     }
 
-    return this.bugReportRepository.updateStatus(id, status as BugReportStatus, adminNotes);
+    const updated = await this.bugReportRepository.updateStatus(id, status as BugReportStatus, adminNotes);
+
+    if (this.notificationService && existing.userId) {
+      const statusLabels: Record<string, string> = {
+        PENDING: 'Pendiente',
+        IN_REVIEW: 'En revisión por el equipo de soporte',
+        RESOLVED: 'Resuelto / Aprobado',
+        DISCARDED: 'Desestimado / Cerrado'
+      };
+      const statusText = statusLabels[status] || status;
+      const notesText = adminNotes?.trim() ? ` Respuesta de administración: "${adminNotes.trim()}"` : '';
+
+      await this.notificationService.createNotification({
+        userId: existing.userId,
+        title: `Actualización de tu solicitud #${id}`,
+        message: `Tu ticket "${existing.summary}" pasó al estado: ${statusText}.${notesText}`,
+        type: 'SYSTEM_ANNOUNCEMENT'
+      }).catch(err => console.error('[BUG_REPORT] Error enviando notificación al creador del ticket:', err));
+    }
+
+    return updated;
   }
 }

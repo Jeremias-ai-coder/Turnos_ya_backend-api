@@ -223,9 +223,9 @@ export class AppointmentService {
 
     const minCancellationHours = Math.max(24, appointment.service?.minCancellationNoticeHours || 24);
 
-    // Los clientes (o usuarios cancelando sus propios turnos) deben cumplir estrictamente la anticipación mínima de 24hs.
-    // Solo un dueño cancelando el turno de un cliente por fuerza mayor o un administrador sobre turnos ajenos están exentos.
-    const isExempt = (isOwner && !isClient) || (isAdmin && !isClient);
+    // Los clientes deben cumplir estrictamente la anticipación mínima de 24hs.
+    // Los dueños de comercio (sobre su negocio) y administradores (sobre turnos de terceros) están exentos.
+    const isExempt = isOwner || (isAdmin && !isClient);
 
     if (hoursUntil < minCancellationHours && !isExempt) {
       throw new AppError(

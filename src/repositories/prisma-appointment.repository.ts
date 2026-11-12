@@ -49,7 +49,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       include: {
         service: true,
         business: true,
-        user: { select: { id: true, name: true, email: true } },
+        user: { select: { id: true, name: true, email: true, phone: true } },
         review: true
       }
     });
@@ -124,7 +124,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
         include: {
           service: true,
           business: true,
-          user: { select: { id: true, name: true, email: true } },
+          user: { select: { id: true, name: true, email: true, phone: true } },
           review: true
         },
         orderBy: [{ date: 'desc' }, { time: 'desc' }]
@@ -138,8 +138,8 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
 
     return this.prisma.appointment.findMany({
       include: {
-        user: { select: { id: true, name: true, email: true } },
-        business: { select: { id: true, name: true } },
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        business: { select: { id: true, name: true, address: true, phone: true } },
         service: { select: { id: true, name: true, price: true } },
         review: true
       },

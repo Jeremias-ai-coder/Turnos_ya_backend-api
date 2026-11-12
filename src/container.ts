@@ -60,7 +60,7 @@ export const adminService = new AdminService(userRepository, businessRepository,
 export const auditService = new AuditService(prisma, notificationService);
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository, prisma, auditService);
 export const categoryService = new CategoryService(prisma);
-export const bugReportService = new BugReportService(bugReportRepository);
+export const bugReportService = new BugReportService(bugReportRepository, notificationService);
 export const announcementService = new AnnouncementService(prisma);
 
 // Tareas en segundo plano (Scheduler)
