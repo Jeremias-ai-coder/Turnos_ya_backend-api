@@ -1,4 +1,4 @@
-import { AdminService, ROOT_ADMIN_EMAILS, isRootAdminEmail } from './admin.service';
+import { AdminService, ROOT_ADMIN_EMAIL, isRootAdminEmail } from './admin.service';
 import { IUserRepository } from '../interfaces/user.interface';
 import { IBusinessRepository } from '../interfaces/business.interface';
 import { IAppointmentRepository } from '../interfaces/appointment.interface';
@@ -49,16 +49,13 @@ describe('AdminService - Root Protection & RBAC Hierarchy', () => {
   });
 
   describe('isRootAdminEmail', () => {
-    it('debe identificar turnosyapp@gmail.com como cuenta raíz', () => {
+    it('debe identificar turnosyapp@gmail.com como la única cuenta raíz inmutable', () => {
       expect(isRootAdminEmail('turnosyapp@gmail.com')).toBe(true);
       expect(isRootAdminEmail('TURNOSYAPP@GMAIL.COM ')).toBe(true);
     });
 
-    it('debe identificar jeremiascollaud@gmail.com como cuenta raíz', () => {
-      expect(isRootAdminEmail('jeremiascollaud@gmail.com')).toBe(true);
-    });
-
-    it('debe retornar false para usuarios comunes o administradores secundarios', () => {
+    it('debe retornar false para administradores secundarios y usuarios comunes', () => {
+      expect(isRootAdminEmail('jeremiascollaud@gmail.com')).toBe(false);
       expect(isRootAdminEmail('otro.admin@turnosya.com')).toBe(false);
       expect(isRootAdminEmail('cliente@example.com')).toBe(false);
       expect(isRootAdminEmail(null)).toBe(false);

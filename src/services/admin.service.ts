@@ -5,15 +5,11 @@ import { AppError } from '../middlewares/errorHandler';
 import { Role, PrismaClient } from '@prisma/client';
 import { CacheService, cacheService } from './cache.service';
 
-export const ROOT_ADMIN_EMAILS = [
-  'turnosyapp@gmail.com',
-  'jeremiascollaud@gmail.com',
-  'jeremiascoll@gmail.com',
-];
+export const ROOT_ADMIN_EMAIL = 'turnosyapp@gmail.com';
 
 export function isRootAdminEmail(email?: string | null): boolean {
   if (!email) return false;
-  return ROOT_ADMIN_EMAILS.includes(email.toLowerCase().trim());
+  return email.toLowerCase().trim() === ROOT_ADMIN_EMAIL.toLowerCase();
 }
 
 export class AdminService {
