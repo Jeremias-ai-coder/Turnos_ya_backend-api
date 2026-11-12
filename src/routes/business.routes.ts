@@ -1,5 +1,12 @@
 import { Router } from 'express';
-import { businessController, serviceController, scheduleController, reviewController, appointmentController } from '../container';
+import {
+  businessController,
+  serviceController,
+  scheduleController,
+  reviewController,
+  appointmentController,
+  communityController
+} from '../container';
 import { authGuard, optionalAuth } from '../middlewares/authGuard';
 
 const router = Router();
@@ -7,8 +14,17 @@ const router = Router();
 router.get('/', businessController.getBusinesses);
 router.post('/', authGuard, businessController.createBusiness);
 router.get('/my', authGuard, businessController.getMyBusinesses);
+router.get('/my/favorites', authGuard, communityController.getMyFavorites);
 router.get('/:id', businessController.getBusiness);
 router.patch('/:id', authGuard, businessController.updateBusiness);
+
+// Comunidad: Seguidores / Favoritos, Difusión de Avisos y Días Cerrados / Feriados
+router.get('/:id/community', optionalAuth, communityController.getBusinessCommunitySummary);
+router.post('/:id/follow', authGuard, communityController.toggleFollow);
+router.patch('/:id/follow/notifications', authGuard, communityController.updateNotificationPreference);
+router.post('/:id/broadcasts', authGuard, communityController.sendBroadcast);
+router.post('/:id/closed-dates', authGuard, communityController.addClosedDate);
+router.delete('/:id/closed-dates/:date', authGuard, communityController.removeClosedDate);
 
 // Servicios dependientes del negocio
 router.get('/:id/services', serviceController.getServices);

@@ -54,6 +54,14 @@ export class PrismaBusinessRepository implements IBusinessRepository {
               status: true
             }
           },
+          schedules: {
+            select: {
+              id: true,
+              dayOfWeek: true,
+              startTime: true,
+              endTime: true
+            }
+          },
           appointments: {
             where: { review: { isNot: null } },
             select: {
@@ -99,6 +107,14 @@ export class PrismaBusinessRepository implements IBusinessRepository {
             price: true,
             durationMinutes: true,
             status: true
+          }
+        },
+        schedules: {
+          select: {
+            id: true,
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true
           }
         },
         appointments: {

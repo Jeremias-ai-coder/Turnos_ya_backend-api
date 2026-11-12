@@ -24,6 +24,7 @@ export interface GetAppointmentsParams {
 }
 
 import { CacheService, cacheService } from './cache.service';
+import { CommunityService } from './community.service';
 
 export class AppointmentService {
   constructor(
@@ -31,7 +32,8 @@ export class AppointmentService {
     private serviceRepo?: IServiceRepository,
     private notificationService?: NotificationService,
     private cache: CacheService = cacheService,
-    private businessRepo?: IBusinessRepository
+    private businessRepo?: IBusinessRepository,
+    private communityService?: CommunityService
   ) {}
 
 
@@ -49,6 +51,13 @@ export class AppointmentService {
       }
       if (business.status && business.status !== 'approved') {
         throw new AppError('Este comercio no se encuentra habilitado para recibir reservas en este momento', 400);
+      }
+    }
+
+    if (this.communityService) {
+      const closedReason = await this.communityService.getClosedReasonForDate(Number(data.businessId), data.date);
+      if (closedReason) {
+        throw new AppError(`El comercio permanece cerrado en la fecha seleccionada (${closedReason})`, 400);
       }
     }
 
@@ -435,8 +444,14 @@ export class AppointmentService {
     return this.cache.getOrSet(
       `slots:${businessId}:${date}`,
       async () => {
+        if (this.communityService) {
+          const closedReason = await this.communityService.getClosedReasonForDate(businessId, date);
+          if (closedReason) {
+            return { data: [], isClosedDate: true, closedReason };
+          }
+        }
         const busySlots = await this.appointmentRepo.findBusySlotsByDate(businessId, date);
-        return { data: busySlots };
+        return { data: busySlots, isClosedDate: false, closedReason: null };
       },
       180 // 3 minutos TTL
     );

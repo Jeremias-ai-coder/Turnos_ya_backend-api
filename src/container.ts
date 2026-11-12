@@ -23,6 +23,7 @@ import { CategoryService } from './services/category.service';
 import { BugReportService } from './services/bug-report.service';
 import { AnnouncementService } from './services/announcement.service';
 import { AuditService } from './services/audit.service';
+import { CommunityService } from './services/community.service';
 import { ReminderJob } from './infrastructure/reminder.job';
 
 // Controladores
@@ -38,6 +39,7 @@ import { CategoryController } from './controllers/category.controller';
 import { BugReportController } from './controllers/bug-report.controller';
 import { AnnouncementController } from './controllers/announcement.controller';
 import { AuditController } from './controllers/audit.controller';
+import { CommunityController } from './controllers/community.controller';
 
 // 1. Instanciación de Repositorios (Inyección de Prisma Client)
 export const serviceRepository = new PrismaServiceRepository(prisma);
@@ -52,9 +54,10 @@ export const bugReportRepository = new PrismaBugReportRepository(prisma);
 // 2. Instanciación de Servicios (Inyección de Repositorios)
 export const notificationService = new NotificationService(notificationRepository, prisma);
 export const auditService = new AuditService(prisma, notificationService);
+export const communityService = new CommunityService(prisma, notificationService);
 export const serviceService = new ServiceService(serviceRepository, businessRepository);
 export const businessService = new BusinessService(businessRepository, userRepository, notificationService, undefined, auditService);
-export const appointmentService = new AppointmentService(appointmentRepository, serviceRepository, notificationService, undefined, businessRepository);
+export const appointmentService = new AppointmentService(appointmentRepository, serviceRepository, notificationService, undefined, businessRepository, communityService);
 export const authService = new AuthService(userRepository);
 export const scheduleService = new ScheduleService(scheduleRepository, businessRepository);
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository, prisma);
@@ -79,4 +82,5 @@ export const categoryController = new CategoryController(categoryService);
 export const bugReportController = new BugReportController(bugReportService);
 export const announcementController = new AnnouncementController(announcementService);
 export const auditController = new AuditController(auditService);
+export const communityController = new CommunityController(communityService);
 
