@@ -354,8 +354,10 @@ export class AuthService {
       throw new AppError('Este token de autorización ya ha sido utilizado o ha expirado. Por favor solicita una nueva verificación.', 401);
     }
 
+    // Si la identidad fue demostrada con verificación de correo (código de 6 dígitos) o 2FA,
+    // se permite definir la nueva contraseña sin requerir la contraseña actual (imprescindible para usuarios de Google y restablecimientos)
     const canSkipCurrentPassword = Boolean(
-      data.skipCurrentPassword && (decoded.method === 'EMAIL' || decoded.method === '2FA')
+      (data.skipCurrentPassword || !data.currentPassword) && (decoded.method === 'EMAIL' || decoded.method === '2FA')
     );
 
     if (!canSkipCurrentPassword) {
