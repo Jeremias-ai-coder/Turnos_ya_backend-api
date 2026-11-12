@@ -52,6 +52,7 @@ export class PrismaUserRepository implements IUserRepository {
         role: true,
         phone: true,
         emailVerified: true,
+        createdAt: true,
         businesses: {
           select: {
             id: true,
@@ -59,6 +60,8 @@ export class PrismaUserRepository implements IUserRepository {
             category: true,
             phone: true,
             address: true,
+            status: true,
+            createdAt: true,
           }
         },
         _count: {

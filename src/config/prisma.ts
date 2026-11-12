@@ -11,4 +11,13 @@ export async function ensureDatabaseSchema() {
   } catch {
     // Si la columna ya existe, se ignora silenciosamente
   }
+
+  try {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE users ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;`
+    );
+    console.log('[DB] Columna created_at verificada/agregada a users.');
+  } catch {
+    // Si la columna ya existe, se ignora silenciosamente
+  }
 }

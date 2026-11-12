@@ -103,7 +103,7 @@ export class AdminService {
                 take: 5,
                 where: { deletedAt: null },
                 orderBy: { id: 'desc' },
-                select: { id: true, name: true, email: true, role: true }
+                select: { id: true, name: true, email: true, role: true, phone: true, createdAt: true }
               })
             ]);
 

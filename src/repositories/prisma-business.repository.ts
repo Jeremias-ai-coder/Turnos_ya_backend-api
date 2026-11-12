@@ -42,7 +42,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
         where: whereClause,
         orderBy: { createdAt: 'desc' },
         include: {
-          owner: { select: { id: true, name: true, email: true, phone: true } },
+          owner: { select: { id: true, name: true, email: true, phone: true, createdAt: true } },
           categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
           services: {
             select: {
@@ -89,7 +89,7 @@ export class PrismaBusinessRepository implements IBusinessRepository {
     const b = await this.prisma.business.findUnique({
       where: { id },
       include: {
-        owner: { select: { id: true, name: true, email: true, phone: true } },
+        owner: { select: { id: true, name: true, email: true, phone: true, createdAt: true } },
         categoryRel: { select: { id: true, name: true, slug: true, icon: true } },
         services: {
           select: {
