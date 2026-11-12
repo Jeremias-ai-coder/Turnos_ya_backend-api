@@ -36,6 +36,8 @@ const normalize = (t: string = '') =>
 
 // Lista de correos de usuarios reales autorizados para producción
 const ALLOWED_EMAILS = [
+  'turnosyapp@gmail.com',
+  'jeremiascollaud@gmail.com',
   'admin@turnosya.com',
   'jereadminmail@mail.com',
   'jereowner@mail.com',
@@ -115,9 +117,15 @@ async function migrate() {
     }
     processedEmails.add(emailNorm);
 
-    // Si es admin@turnosya.com, forzar rol administrator
+    // Si es cuenta oficial de administración o personal de Jeremías, forzar rol administrator
     let role = u.role;
-    if (emailNorm === 'admin@turnosya.com' || emailNorm === 'jereadminmail@mail.com') {
+    if (
+      emailNorm === 'turnosyapp@gmail.com' ||
+      emailNorm === 'jeremiascollaud@gmail.com' ||
+      emailNorm === 'admin@turnosya.com' ||
+      emailNorm === 'jereadminmail@mail.com' ||
+      emailNorm === 'jeremiascoll@gmail.com'
+    ) {
       role = 'administrator';
     }
 
