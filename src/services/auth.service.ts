@@ -10,6 +10,11 @@ import { sendEmail } from './email.service';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 import { prisma } from '../config/prisma';
 import { parseDeviceName } from '../utils/deviceDetector';
+import {
+  getWelcomeEmailHtml,
+  getPasswordResetEmailHtml,
+  getPasswordChangeCodeEmailHtml,
+} from '../utils/emailTemplates';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
@@ -77,30 +82,11 @@ export class AuthService {
     sendEmail({
       to: user.email,
       subject: '¡Bienvenido a Turnos Ya! Tu cuenta ha sido creada con éxito',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Tu plataforma de turnos online</p>
-          </div>
-          <p style="font-size: 16px; color: #1e293b;">¡Hola <strong>${user.name}</strong>!</p>
-          <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-            Te damos la bienvenida a <strong>Turnos Ya</strong>. Tu cuenta ha sido creada exitosamente asociada al correo <strong>${user.email}</strong>.
-          </p>
-          <p style="font-size: 14px; color: #475569; line-height: 1.6;">
-            A partir de ahora podrás explorar los mejores negocios y profesionales, reservar turnos online las 24 horas y recibir recordatorios automáticos de tus citas.
-          </p>
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${frontendUrl}" style="background-color: #009ee3; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
-              Comenzar a explorar Turnos Ya
-            </a>
-          </div>
-          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-            Si no creaste esta cuenta, puedes desestimar este mensaje de forma segura.
-          </p>
-        </div>
-      `,
+      html: getWelcomeEmailHtml({
+        name: user.name,
+        email: user.email,
+        frontendUrl,
+      }),
     }).catch(err => console.error('[EMAIL] Error enviando correo de bienvenida:', err));
 
     return {
@@ -192,29 +178,10 @@ export class AuthService {
     sendEmail({
       to: user.email,
       subject: 'Código de seguridad para cambiar tu contraseña - Turnos Ya',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Seguridad de tu cuenta</p>
-          </div>
-          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
-          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
-            Recibimos una solicitud para modificar la contraseña de tu cuenta desde tu panel de seguridad.
-            Para autorizar el cambio, ingresa el siguiente código de verificación de 6 dígitos:
-          </p>
-          <div style="text-align: center; margin: 24px 0;">
-            <div style="display: inline-block; background: #f0f9ff; border: 2px dashed #009ee3; padding: 14px 32px; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #009ee3; border-radius: 10px;">
-              ${code}
-            </div>
-            <p style="font-size: 12px; color: #64748b; margin-top: 8px;">Este código es válido por 15 minutos.</p>
-          </div>
-          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #dc2626; margin: 0;">
-            ⚠️ Si tú no realizaste esta solicitud, nadie puede cambiar tu contraseña sin este código de verificación.
-          </p>
-        </div>
-      `,
+      html: getPasswordChangeCodeEmailHtml({
+        name: user.name,
+        code,
+      }),
     }).catch(err => console.error('[EMAIL] Error al enviar código de cambio de contraseña:', err));
 
     return {
@@ -440,32 +407,10 @@ export class AuthService {
     const emailResult = await sendEmail({
       to: user.email,
       subject: 'Recuperación de contraseña - Turnos Ya',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
-          <div style="text-align: center; margin-bottom: 20px;">
-            <h1 style="color: #009ee3; margin: 0; font-size: 24px;">Turnos Ya</h1>
-            <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Recuperación de cuenta</p>
-          </div>
-          <p style="font-size: 15px; color: #1e293b;">Hola <strong>${user.name}</strong>,</p>
-          <p style="font-size: 14px; color: #475569; line-height: 1.5;">
-            Recibimos una solicitud para restablecer la contraseña de tu cuenta en Turnos Ya. 
-            Haz clic en el botón a continuación para crear tu nueva contraseña (el enlace es válido por 1 hora):
-          </p>
-          <div style="text-align: center; margin: 28px 0;">
-            <a href="${resetUrl}" style="background-color: #009ee3; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">
-              Restablecer mi contraseña
-            </a>
-          </div>
-          <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
-            Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:<br/>
-            <a href="${resetUrl}" style="color: #009ee3; word-break: break-all;">${resetUrl}</a>
-          </p>
-          <hr style="border: none; border-top: 1px solid #f1f5f9; margin: 20px 0;" />
-          <p style="font-size: 12px; color: #94a3b8; margin: 0;">
-            Si no solicitaste este cambio, puedes ignorar este correo de forma segura. Tu contraseña no cambiará.
-          </p>
-        </div>
-      `,
+      html: getPasswordResetEmailHtml({
+        name: user.name,
+        resetUrl,
+      }),
     });
 
     return {
