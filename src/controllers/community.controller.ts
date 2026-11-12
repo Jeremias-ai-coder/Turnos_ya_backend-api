@@ -64,3 +64,4 @@ export class CommunityController {
     res.json(result);
   };
 }
+
