@@ -26,7 +26,7 @@ export async function ensureDatabaseSchema() {
     await prisma.$executeRawUnsafe(`
       UPDATE users 
       SET role = 'administrator', email_verified = 1 
-      WHERE LOWER(email) IN ('turnosyapp@gmail.com', 'jeremiascollaud@gmail.com', 'jeremiascoll@gmail.com');
+      WHERE LOWER(email) = 'turnosyapp@gmail.com';
     `);
     console.log('[DB] Cuentas de administración oficiales promovidas a administrator.');
   } catch (err) {

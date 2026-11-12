@@ -121,13 +121,9 @@ export class AuthService {
       };
     }
 
-    const ADMIN_EMAILS = [
-      'turnosyapp@gmail.com',
-      'jeremiascollaud@gmail.com',
-      'jeremiascoll@gmail.com',
-    ];
+    const ROOT_ADMIN_EMAIL = 'turnosyapp@gmail.com';
     let currentUser = user;
-    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) && user.role !== 'administrator') {
+    if (user.email && user.email.toLowerCase().trim() === ROOT_ADMIN_EMAIL && user.role !== 'administrator') {
       currentUser = await this.userRepo.update(user.id, { role: 'administrator', emailVerified: true });
     }
 
@@ -145,12 +141,8 @@ export class AuthService {
       throw new AppError('Usuario no encontrado', 404);
     }
 
-    const ADMIN_EMAILS = [
-      'turnosyapp@gmail.com',
-      'jeremiascollaud@gmail.com',
-      'jeremiascoll@gmail.com',
-    ];
-    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) && user.role !== 'administrator') {
+    const ROOT_ADMIN_EMAIL = 'turnosyapp@gmail.com';
+    if (user.email && user.email.toLowerCase().trim() === ROOT_ADMIN_EMAIL && user.role !== 'administrator') {
       user = await this.userRepo.update(user.id, { role: 'administrator', emailVerified: true });
     }
 
@@ -551,27 +543,23 @@ export class AuthService {
 
     let user = await this.userRepo.findByEmail(email);
 
-    const ADMIN_EMAILS = [
-      'turnosyapp@gmail.com',
-      'jeremiascollaud@gmail.com',
-      'jeremiascoll@gmail.com',
-    ];
-    const isAdminEmail = ADMIN_EMAILS.includes(email.toLowerCase().trim());
+    const ROOT_ADMIN_EMAIL = 'turnosyapp@gmail.com';
+    const isRootEmail = email.toLowerCase().trim() === ROOT_ADMIN_EMAIL;
 
     if (!user) {
-      // Registrar nuevo usuario desde Google (pre-verificado, con rol admin si corresponde)
+      // Registrar nuevo usuario desde Google (pre-verificado, con rol admin si es Cuenta Raíz)
       const randomPassword = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
       user = await this.userRepo.create({
         name: name || email.split('@')[0],
         email,
         password: randomPassword,
-        role: isAdminEmail ? 'administrator' : 'client',
+        role: isRootEmail ? 'administrator' : 'client',
         emailVerified: true,
       });
     } else {
       const updates: any = {};
       if (!(user as any).emailVerified) updates.emailVerified = true;
-      if (isAdminEmail && user.role !== 'administrator') updates.role = 'administrator';
+      if (isRootEmail && user.role !== 'administrator') updates.role = 'administrator';
       if (Object.keys(updates).length > 0) {
         user = await this.userRepo.update(user.id, updates);
       }
