@@ -121,18 +121,37 @@ export class AuthService {
       };
     }
 
-    const token = await this.createSessionAndToken(user, meta, '1d');
+    const ADMIN_EMAILS = [
+      'turnosyapp@gmail.com',
+      'jeremiascollaud@gmail.com',
+      'jeremiascoll@gmail.com',
+    ];
+    let currentUser = user;
+    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) && user.role !== 'administrator') {
+      currentUser = await this.userRepo.update(user.id, { role: 'administrator', emailVerified: true });
+    }
+
+    const token = await this.createSessionAndToken(currentUser, meta, '1d');
 
     return {
       token,
-      user: this.sanitizeUser(user)
+      user: this.sanitizeUser(currentUser)
     };
   }
 
   async getMe(userId: number) {
-    const user = await this.userRepo.findById(userId);
+    let user = await this.userRepo.findById(userId);
     if (!user) {
       throw new AppError('Usuario no encontrado', 404);
+    }
+
+    const ADMIN_EMAILS = [
+      'turnosyapp@gmail.com',
+      'jeremiascollaud@gmail.com',
+      'jeremiascoll@gmail.com',
+    ];
+    if (user.email && ADMIN_EMAILS.includes(user.email.toLowerCase().trim()) && user.role !== 'administrator') {
+      user = await this.userRepo.update(user.id, { role: 'administrator', emailVerified: true });
     }
 
     return this.sanitizeUser(user);
@@ -530,18 +549,30 @@ export class AuthService {
 
     let user = await this.userRepo.findByEmail(email);
 
+    const ADMIN_EMAILS = [
+      'turnosyapp@gmail.com',
+      'jeremiascollaud@gmail.com',
+      'jeremiascoll@gmail.com',
+    ];
+    const isAdminEmail = ADMIN_EMAILS.includes(email.toLowerCase().trim());
+
     if (!user) {
-      // Registrar nuevo usuario desde Google con rol cliente (pre-verificado)
+      // Registrar nuevo usuario desde Google (pre-verificado, con rol admin si corresponde)
       const randomPassword = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10);
       user = await this.userRepo.create({
         name: name || email.split('@')[0],
         email,
         password: randomPassword,
+        role: isAdminEmail ? 'administrator' : 'client',
         emailVerified: true,
       });
-    } else if (!(user as any).emailVerified) {
-      // Si el usuario ya existía con registro tradicional, el inicio con Google valida su correo
-      user = await this.userRepo.update(user.id, { emailVerified: true });
+    } else {
+      const updates: any = {};
+      if (!(user as any).emailVerified) updates.emailVerified = true;
+      if (isAdminEmail && user.role !== 'administrator') updates.role = 'administrator';
+      if (Object.keys(updates).length > 0) {
+        user = await this.userRepo.update(user.id, updates);
+      }
     }
 
     // Respetar siempre 2FA (Google Authenticator) si la cuenta lo tiene habilitado
