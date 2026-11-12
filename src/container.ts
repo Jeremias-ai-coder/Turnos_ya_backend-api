@@ -51,13 +51,13 @@ export const bugReportRepository = new PrismaBugReportRepository(prisma);
 
 // 2. Instanciación de Servicios (Inyección de Repositorios)
 export const notificationService = new NotificationService(notificationRepository, prisma);
+export const auditService = new AuditService(prisma, notificationService);
 export const serviceService = new ServiceService(serviceRepository, businessRepository);
-export const businessService = new BusinessService(businessRepository, userRepository, notificationService);
+export const businessService = new BusinessService(businessRepository, userRepository, notificationService, undefined, auditService);
 export const appointmentService = new AppointmentService(appointmentRepository, serviceRepository, notificationService, undefined, businessRepository);
 export const authService = new AuthService(userRepository);
 export const scheduleService = new ScheduleService(scheduleRepository, businessRepository);
 export const adminService = new AdminService(userRepository, businessRepository, appointmentRepository, prisma);
-export const auditService = new AuditService(prisma, notificationService);
 export const reviewService = new ReviewService(reviewRepository, appointmentRepository, prisma, auditService, notificationService);
 export const categoryService = new CategoryService(prisma);
 export const bugReportService = new BugReportService(bugReportRepository, notificationService);

@@ -60,5 +60,6 @@ export interface IBusinessRepository {
   findByOwnerId(ownerId: number): Promise<Business[]>;
   create(ownerId: number, data: CreateBusinessDTO): Promise<Business>;
   update(id: number, data: UpdateBusinessDTO): Promise<Business>;
+  delete(id: number): Promise<Business>;
   count(status?: BusinessStatus | 'ALL'): Promise<number>;
 }

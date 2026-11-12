@@ -202,6 +202,10 @@ export class PrismaBusinessRepository implements IBusinessRepository {
     });
   }
 
+  async delete(id: number): Promise<Business> {
+    return this.prisma.business.delete({ where: { id } });
+  }
+
   async count(status: BusinessStatus | 'ALL' = 'approved'): Promise<number> {
     const where = status === 'ALL' ? {} : { status };
     return this.prisma.business.count({ where });

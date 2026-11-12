@@ -6,13 +6,15 @@ import { AppError } from '../middlewares/errorHandler';
 import { getPaginationOptions, createPaginatedResponse } from '../utils/pagination';
 import { CacheService, cacheService } from './cache.service';
 import { sendEmail } from './email.service';
+import { AuditService } from './audit.service';
 
 export class BusinessService {
   constructor(
     private businessRepo: IBusinessRepository,
     private userRepo: IUserRepository,
     private notificationService?: NotificationService,
-    private cache: CacheService = cacheService
+    private cache: CacheService = cacheService,
+    private auditService?: AuditService
   ) {}
 
   async getBusinesses(page: number = 1, limit: number = 10, search?: string, status: BusinessStatus | 'ALL' = 'approved') {
@@ -234,6 +236,18 @@ export class BusinessService {
       this.cache.del('admin:stats')
     ]);
 
+    if (this.auditService) {
+      const admin = await this.userRepo.findById(adminId);
+      await this.auditService.recordLog({
+        adminId,
+        adminName: admin?.name || `Admin #${adminId}`,
+        action: 'BUSINESS_APPROVED',
+        targetType: 'Business',
+        targetId: id,
+        details: `Comercio "${business.name}" aprobado y dado de alta. Dueño: ${owner?.name || 'Desconocido'} (${owner?.email || 'sin email'}).`
+      });
+    }
+
     return updated;
   }
 
@@ -297,6 +311,18 @@ export class BusinessService {
       this.cache.delPattern('businesses:list:*'),
       this.cache.del('admin:stats')
     ]);
+
+    if (this.auditService) {
+      const admin = await this.userRepo.findById(adminId);
+      await this.auditService.recordLog({
+        adminId,
+        adminName: admin?.name || `Admin #${adminId}`,
+        action: 'BUSINESS_REJECTED',
+        targetType: 'Business',
+        targetId: id,
+        details: `Comercio "${business.name}" observado. Motivo: ${reason}`
+      });
+    }
 
     return updated;
   }
@@ -362,6 +388,18 @@ export class BusinessService {
       this.cache.del('admin:stats')
     ]);
 
+    if (this.auditService) {
+      const admin = await this.userRepo.findById(adminId);
+      await this.auditService.recordLog({
+        adminId,
+        adminName: admin?.name || `Admin #${adminId}`,
+        action: 'BUSINESS_SUSPENDED',
+        targetType: 'Business',
+        targetId: id,
+        details: `Comercio "${business.name}" suspendido temporalmente. Motivo: ${reason}`
+      });
+    }
+
     return updated;
   }
 
@@ -422,6 +460,105 @@ export class BusinessService {
       this.cache.del('admin:stats')
     ]);
 
+    if (this.auditService) {
+      const admin = await this.userRepo.findById(adminId);
+      await this.auditService.recordLog({
+        adminId,
+        adminName: admin?.name || `Admin #${adminId}`,
+        action: 'BUSINESS_REACTIVATED',
+        targetType: 'Business',
+        targetId: id,
+        details: `Comercio "${business.name}" reactivado y habilitado en catálogo.`
+      });
+    }
+
     return updated;
+  }
+
+  async deleteBusinessByAdmin(
+    id: number,
+    adminId: number,
+    reason: string,
+    deleteOwner: boolean = false,
+    ipAddress?: string
+  ) {
+    const business = await this.businessRepo.findById(id);
+    if (!business) {
+      throw new AppError('Negocio no encontrado', 404);
+    }
+
+    const owner = await this.userRepo.findById(business.ownerId);
+    const admin = await this.userRepo.findById(adminId);
+    const adminName = admin?.name || `Admin #${adminId}`;
+
+    const canDeleteOwner = Boolean(
+      deleteOwner &&
+      owner &&
+      owner.role !== 'administrator' &&
+      owner.id !== adminId
+    );
+
+    // 1. Registrar evidencia forense inmutable en audit_logs ANTES de eliminar físicamente
+    if (this.auditService) {
+      const forensicDetails = [
+        `Baja definitiva / Fraude de comercio "${business.name}" (ID #${business.id})`,
+        `Rubro: ${business.category || 'Sin rubro'}`,
+        business.cuit ? `CUIT: ${business.cuit}` : null,
+        business.address ? `Dirección: ${business.address}` : null,
+        `Solicitante: ${owner?.name || 'Desconocido'} (ID #${business.ownerId}, Email: ${owner?.email || 'N/A'})`,
+        `Cuenta del solicitante eliminada: ${canDeleteOwner ? 'SÍ (Purga conjunta por spam/fraude)' : 'NO'}`,
+        `Motivo: ${reason}`
+      ]
+        .filter(Boolean)
+        .join(' | ');
+
+      await this.auditService.recordLog({
+        adminId,
+        adminName,
+        action: 'BUSINESS_DELETED_FRAUD',
+        targetType: 'Business',
+        targetId: id,
+        details: forensicDetails,
+        ipAddress: ipAddress || null
+      });
+    }
+
+    // 2. Eliminar físicamente el negocio de la base de datos operativa
+    await this.businessRepo.delete(id);
+
+    // 3. Opcionalmente eliminar la cuenta del solicitante o notificarle la baja definitiva
+    let deletedOwnerId: number | null = null;
+    if (canDeleteOwner && owner) {
+      await this.userRepo.delete(owner.id);
+      deletedOwnerId = owner.id;
+    } else if (owner) {
+      try {
+        if (this.notificationService) {
+          await this.notificationService.createNotification({
+            userId: owner.id,
+            type: 'BUSINESS_DELETED',
+            title: 'Solicitud de negocio rechazada definitivamente',
+            message: `La solicitud o registro del comercio "${business.name}" fue dada de baja de forma definitiva por administración: ${reason}.`
+          });
+        }
+      } catch (err) {
+        console.warn('[BUSINESS_SERVICE] Error notificando baja definitiva de comercio:', err);
+      }
+    }
+
+    // 4. Invalidar cachés
+    await Promise.all([
+      this.cache.del(`business:detail:${id}`),
+      this.cache.delPattern('businesses:list:*'),
+      this.cache.del('admin:stats')
+    ]);
+
+    return {
+      message: canDeleteOwner
+        ? `Comercio "${business.name}" y cuenta del usuario solicitante eliminados definitivamente. Registro forense guardado en Auditoría.`
+        : `Comercio "${business.name}" eliminado definitivamente. Registro forense guardado en Auditoría.`,
+      deletedBusinessId: id,
+      deletedOwnerId
+    };
   }
 }

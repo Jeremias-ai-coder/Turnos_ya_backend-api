@@ -44,6 +44,9 @@ router.patch('/businesses/:id/suspend', authGuard, requireAdmin, businessControl
 // PATCH /api/v1/admin/businesses/:id/reactivate — Reactivar comercio suspendido
 router.patch('/businesses/:id/reactivate', authGuard, requireAdmin, businessController.reactivateBusiness);
 
+// DELETE /api/v1/admin/businesses/:id — Eliminar comercio definitivamente (fraude / baja con registro forense)
+router.delete('/businesses/:id', authGuard, requireAdmin, businessController.deleteBusinessByAdmin);
+
 // POST /api/v1/admin/businesses/:id/emergency-cancel — Cancelación de emergencia por fuerza mayor
 router.post('/businesses/:id/emergency-cancel', authGuard, requireAdmin, auditController.emergencyCancel);
 

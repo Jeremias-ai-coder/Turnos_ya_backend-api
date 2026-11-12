@@ -96,4 +96,17 @@ export class BusinessController {
     const result = await this.businessService.reactivateBusiness(id, adminId);
     res.json(result);
   };
+
+  deleteBusinessByAdmin = async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    const adminId = (req as any).user.id;
+    const reason = typeof req.body?.reason === 'string' && req.body.reason.trim().length >= 5
+      ? req.body.reason.trim()
+      : 'Baja definitiva por detección de fraude o incumplimiento grave';
+    const deleteOwner = Boolean(req.body?.deleteOwner);
+    const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || '127.0.0.1';
+
+    const result = await this.businessService.deleteBusinessByAdmin(id, adminId, reason, deleteOwner, ipAddress);
+    res.json(result);
+  };
 }
