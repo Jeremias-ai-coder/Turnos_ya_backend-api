@@ -1,6 +1,6 @@
 # ⚙️ Turnos_ya - Backend RESTful API
 
-Servidor RESTful central para la plataforma de reservas y gestión de turnos **Turnos_ya**. Desarrollado con **Node.js**, **Express**, **TypeScript** y **Prisma ORM sobre MySQL**, implementa una arquitectura limpia basada en 3 capas con inversión de dependencias (DIP), autenticación híbrida (JWT + Google OAuth 2.0), envío de correos transaccionales (Nodemailer), sistema de bloqueo concurrente de turnos (*Hold Tokens*) y tareas en segundo plano.
+Servidor RESTful central para la plataforma de reservas y gestión de turnos **Turnos_ya**. Desarrollado con **Node.js**, **Express**, **TypeScript** y **Prisma ORM sobre MySQL**, implementa una **Arquitectura Limpia de 3 capas** con Inversión de Dependencias (DIP), autenticación multifactor (**JWT + Google OAuth 2.0 + 2FA TOTP cifrado con AES-256-GCM**), despacho de correos transaccionales de baja latencia mediante **Resend HTTP API (puerto 443)** con fallback automático a **Nodemailer SMTP**, streaming de notificaciones en tiempo real (**Server-Sent Events**), caché en memoria inteligente (**LRU + TTL**) y bloqueo concurrente de turnos (*Hold Tokens*).
 
 ---
 
@@ -10,40 +10,43 @@ Servidor RESTful central para la plataforma de reservas y gestión de turnos **T
 - **Lenguaje**: [TypeScript](https://www.typescriptlang.org/) (v5.1+)
 - **Framework Web**: [Express.js](https://expressjs.com/) (v4.18) con `express-async-errors`
 - **ORM & Base de Datos**: [Prisma ORM](https://www.prisma.io/) (v5.22) conectado a **MySQL 8.0**
-- **Autenticación y Criptografía**: [JSON Web Tokens (JWT)](https://jwt.io/), [bcrypt](https://www.npmjs.com/package/bcrypt) con salt rounds
-- **Emails Transaccionales**: [Nodemailer](https://nodemailer.com/) con transporte SMTP (Gmail App Password)
-- **Validación de Payloads**: [Zod](https://zod.dev/) (v3.21)
-- **Seguridad y Cabeceras**: [Helmet](https://helmetjs.github.io/) y [CORS](https://www.npmjs.com/package/cors)
-- **Pruebas Automatizadas**: [Jest](https://jestjs.io/) (v30+) con `ts-jest`
-- **Contenedores y DevOps**: Docker Compose para MySQL local y configuración para Render (`render.yaml`)
-- **Ejecución en Desarrollo**: `tsx` (TypeScript Execute / Watch)
+- **Autenticación, 2FA y Criptografía**:
+  - [JSON Web Tokens (JWT)](https://jwt.io/) con validación de sesión activa (`UserSession`) y protección contra confusión de tipos (`type: 'SESSION'`).
+  - [otplib](https://github.com/yeojz/otplib) + [qrcode](https://github.com/soldair/node-qrcode) para **2FA TOTP (Google Authenticator)** con secretos y códigos de respaldo cifrados en reposo mediante **AES-256-GCM** (`src/utils/crypto.ts`).
+  - Códigos OTP de 6 dígitos protegidos con **HMAC-SHA256** y hashing de contraseñas con [bcrypt](https://www.npmjs.com/package/bcrypt).
+- **Emails Transaccionales Híbridos**:
+  - **Primario**: [Resend HTTP API](https://resend.com/) sobre HTTPS (puerto 443, inmune a bloqueos de puertos SMTP en Render Free).
+  - **Fallback**: [Nodemailer](https://nodemailer.com/) con transporte SMTP (Gmail App Password).
+- **Caché y Rendimiento**: Motor propio `CacheService` en memoria (LRU + TTL + invalidación por comodines) y cabeceras HTTP `Cache-Control` (`stale-while-revalidate`).
+- **Seguridad y Validación**: [Zod](https://zod.dev/) (v3.21), [Helmet](https://helmetjs.github.io/), [CORS](https://www.npmjs.com/package/cors) y `rateLimiter` por IP/usuario con soporte `trust proxy`.
+- **Pruebas Automatizadas**: [Jest](https://jestjs.io/) (v30+) con `ts-jest` (8 suites, 87 tests unitarios).
 
 ---
 
-## 🏗️ Arquitectura del Sistema (Clean Architecture / Inversión de Dependencias)
-
-El backend aplica el principio de **Inversión de Dependencias (Dependency Inversion Principle - DIP)** y el **Patrón Repositorio**:
+## 🏗️ Arquitectura del Sistema (Clean Architecture & DIP)
 
 ```text
                ┌────────────────────────────────────────────────────────┐
-               │                     Cliente HTTP                       │
+               │              Cliente Web SPA / App Móvil               │
                └───────────────────────────┬────────────────────────────┘
                                            │
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │ 1. CAPA DE PRESENTACIÓN / CONTROLADORES (Presentation Layer)                            │
-│    • src/routes/        : Enrutadores Express (v1 y alias directos).                    │
-│    • src/middlewares/   : JWT Guard (authGuard), Logger y ErrorHandler (RFC 7807).     │
+│    • src/routes/        : Enrutadores Express (/api/v1/* y alias directos /*).          │
+│    • src/middlewares/   : authGuard (JWT + revocación remota), rateLimiter,             │
+│                           cacheControl, requestLogger y errorHandler (RFC 7807).        │
 │    • src/validators/    : Esquemas Zod para validación estricta de entrada.             │
-│    • src/controllers/   : Gestión de req/res, códigos HTTP y serialización.             │
+│    • src/controllers/   : Orquestación HTTP, serialización y delegación a servicios.    │
 └──────────────────────────────────────────┬──────────────────────────────────────────────┘
                                            │  Invoca (Inyección mediante container.ts)
                                            ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────────┐
 │ 2. CAPA DE LÓGICA DE NEGOCIO (Domain & Business Logic Layer)                            │
-│    • src/services/      : Lógica de reserva, hold tokens, hash bcrypt, verificación     │
-│                           de email, reseteo de claves y worker de recordatorios.       │
-│    • src/container.ts   : Contenedor IoC / Wire-up de dependencias de la aplicación.    │
+│    • src/services/      : Auth (JWT, OAuth, 2FA, Sesiones), Appointments (Hold Tokens,  │
+│                           feriados), Admin (Inmunidad Cuenta Raíz), Community,          │
+│                           Reviews, Categories, BugReports, Announcements, Audit, Cache. │
+│    • src/container.ts   : Contenedor IoC / Wire-up centralizado de dependencias.        │
 └──────────────────────────────────────────┬──────────────────────────────────────────────┘
                                            │  Consume Interfaces (IUserRepository, etc.)
                                            ▼
@@ -51,9 +54,9 @@ El backend aplica el principio de **Inversión de Dependencias (Dependency Inver
 │ 3. CAPA DE PERSISTENCIA Y EXTERNOS (Data Access & Infrastructure)                       │
 │    • src/interfaces/    : Contratos desacoplados de persistencia.                       │
 │    • src/repositories/  : Implementaciones concretas con Prisma Client sobre MySQL.     │
-│    • src/config/        : Singleton de PrismaClient y comprobación de esquema.          │
-│    • src/infrastructure/: Webhooks HTTP asíncronos para integración con terceros.       │
-│    • src/services/email : Despacho de correos HTML mediante Gmail SMTP.                 │
+│    • src/config/        : Singleton de PrismaClient y auto-healing (prisma.ts).         │
+│    • src/infrastructure/: Worker periódico de recordatorios (reminder.job.ts).          │
+│    • src/services/email : Despacho híbrido Resend HTTPS API + Nodemailer SMTP.          │
 └─────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -64,76 +67,67 @@ El backend aplica el principio de **Inversión de Dependencias (Dependency Inver
 ```text
 Turnos_ya_backend-api-main/
 ├── prisma/
-│   ├── schema.prisma                 # Definición del modelo relacional (User, Business, Service, etc.)
-│   └── seeds/                        # Scripts de sembrado de datos iniciales
+│   ├── schema.prisma                 # Esquema relacional (User, UserSession, Business, Category, Service, Schedule, Appointment, Review, Notification, BugReport)
+│   └── seeds/                        # Sembrado inicial ( parametrizado por variables de entorno sin credenciales hardcodeadas)
 ├── scripts/
-│   ├── check-db.ts                   # Comprobación de estado y conectividad MySQL
-│   ├── grant-admin.ts                # Asignación de rol de administrador por correo
-│   └── sync-businesses-to-prod.ts    # Sincronización de comercios semilla a producción
+│   ├── breaking-point-test.ts        # Prueba de estrés hasta punto de quiebre
+│   ├── check-db.ts                   # Diagnóstico de conectividad MySQL
+│   ├── grant-admin.ts                # Promoción administrativa por consola
+│   ├── inspect-dbs.ts                # Inspección de tablas y registros
+│   ├── migrate-to-clean-prod.ts      # Migración limpia a entorno productivo
+│   ├── stress-test.ts                # Benchmark de concurrencia y latencia
+│   └── sync-businesses-to-prod.ts    # Sincronización de comercios semilla
 ├── src/
 │   ├── config/
-│   │   └── prisma.ts                 # Singleton de PrismaClient y ensureDatabaseSchema()
-│   ├── container.ts                  # Inyección de dependencias centralizada (IoC)
+│   │   └── prisma.ts                 # Singleton PrismaClient y ensureDatabaseSchema()
+│   ├── container.ts                  # Contenedor IoC de inyección de dependencias
 │   ├── controllers/                  # Controladores HTTP
 │   │   ├── admin.controller.ts
+│   │   ├── announcement.controller.ts
 │   │   ├── appointment.controller.ts
+│   │   ├── audit.controller.ts
 │   │   ├── auth.controller.ts
+│   │   ├── bug-report.controller.ts
 │   │   ├── business.controller.ts
 │   │   ├── category.controller.ts
+│   │   ├── community.controller.ts
 │   │   ├── notification.controller.ts
 │   │   ├── review.controller.ts
 │   │   ├── schedule.controller.ts
 │   │   └── service.controller.ts
 │   ├── infrastructure/
-│   │   └── webhook.service.ts        # Despacho de webhooks de negocio
+│   │   └── reminder.job.ts           # Worker de recordatorios automáticos cada 60s
 │   ├── interfaces/                   # Contratos de repositorios (DIP)
-│   │   ├── appointment.interface.ts
-│   │   ├── business.interface.ts
-│   │   ├── schedule.interface.ts
-│   │   ├── service.interface.ts
-│   │   └── user.interface.ts
 │   ├── middlewares/
-│   │   ├── authGuard.ts              # Validación de token JWT y asignación de req.user
-│   │   ├── errorHandler.ts           # Manejo uniforme de errores (RFC 7807 Problem Details)
-│   │   └── requestLogger.ts          # Registro de peticiones HTTP en consola
-│   ├── repositories/                 # Implementaciones Prisma de acceso a datos
-│   │   ├── prisma-appointment.repository.ts
-│   │   ├── prisma-business.repository.ts
-│   │   ├── prisma-schedule.repository.ts
-│   │   ├── prisma-service.repository.ts
-│   │   └── prisma-user.repository.ts
+│   │   ├── authGuard.ts & .test.ts   # Validación JWT, tipo SESSION y revocación remota
+│   │   ├── cacheControl.ts           # Cabeceras HTTP Cache-Control (SWR)
+│   │   ├── errorHandler.ts           # Respuestas estandarizadas RFC 7807
+│   │   ├── rateLimiter.ts            # Límite de peticiones por IP y usuario
+│   │   └── requestLogger.ts          # Auditoría HTTP con redacción de tokens
+│   ├── repositories/                 # Implementaciones Prisma
 │   ├── routes/                       # Definición de rutas Express
 │   │   ├── admin.routes.ts
+│   │   ├── announcement.routes.ts
 │   │   ├── appointment.routes.ts
 │   │   ├── auth.routes.ts
 │   │   ├── business.routes.ts
 │   │   ├── category.routes.ts
 │   │   ├── health.routes.ts
-│   │   └── notification.routes.ts
-│   ├── services/                     # Servicios de lógica de negocio y tests
-│   │   ├── admin.service.ts
-│   │   ├── appointment.service.ts & appointment.service.test.ts
-│   │   ├── auth.service.ts & auth.service.test.ts
-│   │   ├── business.service.ts & business.service.test.ts
-│   │   ├── category.service.ts
-│   │   ├── email.service.ts          # Envío de emails HTML con Nodemailer
-│   │   ├── notification.service.ts   # Notificaciones in-app y recordatorios
-│   │   ├── review.service.ts
-│   │   ├── schedule.service.ts
-│   │   └── service.service.ts
+│   │   ├── notification.routes.ts
+│   │   └── report.routes.ts
+│   ├── services/                     # Lógica de negocio y suites de pruebas (.test.ts)
 │   ├── utils/
-│   │   ├── keepAlive.ts              # Auto-ping para evitar suspensión en Render
+│   │   ├── crypto.ts                 # Cifrado AES-256-GCM para secretos 2FA
+│   │   ├── date.ts                   # Manejo de horas wall-clock y zonas horarias
+│   │   ├── deviceDetector.ts         # Detección de navegador/SO para sesiones
+│   │   ├── emailTemplates.ts         # Plantillas HTML transaccionales
+│   │   ├── keepAlive.ts              # Auto-ping para Render Cloud
 │   │   └── pagination.ts             # Helpers de paginación estandarizada
-│   ├── validators/                   # Schemas de validación Zod
-│   │   ├── appointment.validator.ts
-│   │   ├── auth.validator.ts
-│   │   ├── business.validator.ts
-│   │   ├── schedule.validator.ts
-│   │   └── service.validator.ts
-│   └── server.ts                     # Entrada de la app, jobs periódicos y middleware setup
-├── docker-compose.yml                # Contenedor MySQL 8.0 para desarrollo local
-├── jest.config.js                    # Configuración de pruebas unitarias Jest
-├── render.yaml                       # Despliegue de infraestructura en Render Cloud
+│   ├── validators/                   # Esquemas Zod y pruebas unitarias
+│   └── server.ts                     # Entrada principal de la aplicación
+├── docker-compose.yml
+├── jest.config.js
+├── render.yaml
 ├── package.json
 └── tsconfig.json
 ```
@@ -142,140 +136,119 @@ Turnos_ya_backend-api-main/
 
 ## 🔗 Catálogo de Endpoints RESTful
 
-Todos los endpoints están disponibles bajo el prefijo `/api/v1/` y cuentan con alias directos en `/` para máxima compatibilidad:
+Todos los endpoints están disponibles bajo `/api/v1/` y cuentan con alias directos en `/`:
 
-### 🔐 Autenticación y Perfil (`/api/v1/auth`)
-- `POST /login` — Inicio de sesión con email y contraseña, retorno de JWT.
-- `POST /register` — Registro de usuario y envío de email de bienvenida.
-- `POST /google` — Autenticación federada con Google OAuth 2.0 (auto-verifica email).
-- `POST /forgot-password` — Solicitud de recuperación de contraseña vía email con token seguro.
-- `POST /reset-password` — Establecimiento de nueva contraseña con token de recuperación.
-- `GET /me` — Perfil del usuario autenticado actual.
-- `PATCH /profile` — Actualización de nombre, teléfono y preferencias (`emailNotifications`, `whatsappNotifications`).
-- `POST /send-verification-email` — Envío de código numérico de 6 dígitos para verificar correo.
-- `GET /verify-email` & `POST /verify-email` — Validación de email en 1 clic mediante enlace o código de 6 dígitos.
-- `POST /request-password-change-code` — Envío de código de seguridad de 6 dígitos para cambio de contraseña desde perfil.
-- `POST /verify-password-change-code` — Validación del código de seguridad previo al cambio de clave.
-- `POST /confirm-password-change` — Actualización definitiva de clave validando código y contraseña anterior.
+### 🔐 Autenticación, 2FA y Sesiones (`/api/v1/auth` y `/api/v1/users`)
+- `POST /register` — Registro de usuario (forzado a `client`/`owner`) y correo de bienvenida.
+- `POST /login` — Login con credenciales (retorna `require2FA: true` y `tempToken` si el usuario tiene 2FA activo).
+- `POST /google` — Autenticación federada con Google OAuth 2.0 (soporta flujo 2FA si está activo).
+- `POST /2fa/login-verify` — Verificación de código TOTP o código de respaldo para completar el login.
+- `GET /2fa/setup` & `POST /2fa/setup` — Generación de secreto TOTP y código QR para Google Authenticator.
+- `POST /2fa/verify-and-enable` — Confirmación de código TOTP y emisión de 8 códigos de respaldo únicos.
+- `POST /2fa/disable` — Desactivación de 2FA mediante contraseña actual, código TOTP o código de respaldo.
+- `GET /me` & `PATCH /profile` — Consulta y edición de perfil y preferencias de alertas.
+- `DELETE /account` — Baja voluntaria de cuenta y revocación de sesiones.
+- `POST /send-verification-email` & `POST /verify-email` (`GET /verify-email`) — Verificación de correo por código de 6 dígitos (HMAC) o enlace de 1 clic.
+- `POST /request-password-change-code` — Solicitud de código OTP por email para cambio de contraseña.
+- `POST /verify-password-change-code` — Validación del código OTP de correo y emisión de `changeAuthToken`.
+- `POST /verify-password-change-2fa` — Validación de identidad vía Google Authenticator para cambio de contraseña.
+- `POST /submit-password-change` — Actualización definitiva de contraseña (soporta `skipCurrentPassword` cuando la identidad fue validada por OTP o 2FA, ideal para cuentas Google OAuth) y revocación de sesiones previas.
+- `POST /forgot-password` & `POST /reset-password` — Recuperación de contraseña olvidada por email.
+- `GET /sessions`, `DELETE /sessions/:id` & `POST /sessions/revoke-all` — Listado y cierre remoto de dispositivos vinculados.
 
-### 🏬 Comercios y Catálogo (`/api/v1/businesses`)
-- `GET /` — Listado público paginado con filtros por búsqueda y categoría.
-- `POST /` — Creación de un nuevo comercio (eleva automáticamente el rol a `owner`).
-- `GET /my` — Listado de los comercios pertenecientes al usuario logueado.
-- `GET /:id` — Ficha completa del comercio con coordenadas, horarios y servicios.
-- `PATCH /:id` — Actualización de datos del comercio (solo dueño o admin).
-- `GET /:id/services` — Listado de servicios del comercio.
-- `POST /:id/services` — Creación de servicio (duración, precio, buffer time).
-- `PUT /:id/services/:serviceId` & `DELETE ...` — Edición o baja de servicio.
-- `GET /:id/schedules` — Matriz de horarios de atención semanal.
-- `POST /:id/schedules` & `DELETE ...` — Configuración de franjas horarias por día.
-- `GET /:id/busy-slots?date=YYYY-MM-DD` — Consulta de franjas horarias ocupadas para una fecha dada.
-- `GET /:id/reviews` — Reseñas y calificaciones otorgadas al comercio.
+### 🏬 Comercios, Comunidad y Catálogo (`/api/v1/businesses`)
+- `GET /` — Listado público paginado de comercios aprobados con búsqueda y filtro por categoría.
+- `POST /` — Postulación de nuevo comercio (nace en `pending_approval` con evidencias comerciales).
+- `GET /my` — Listado de comercios propios del usuario autenticado.
+- `GET /my/favorites` — Listado de comercios seguidos por el usuario con datos enriquecidos del local.
+- `GET /:id` & `PATCH /:id` — Detalle completo y actualización del comercio.
+- `GET /:id/community` — Resumen de seguidores, estado de seguimiento, próximos feriados y avisos recientes.
+- `POST /:id/follow` & `PATCH /:id/follow/notifications` — Seguir/dejar de seguir comercio y configurar alertas.
+- `POST /:id/broadcasts` — Envío de comunicados/promociones a seguidores (cupo anti-spam de 3 por semana).
+- `POST /:id/closed-dates` & `DELETE /:id/closed-dates/:date` — Gestión de días cerrados / Modo Feriado.
+- `GET /:id/services`, `POST /:id/services`, `PUT/PATCH /:id/services/:serviceId`, `DELETE /:id/services/:serviceId` — ABM de servicios con invalidación automática de caché.
+- `GET /:id/schedules`, `POST /:id/schedules`, `PUT/PATCH /:id/schedules/:scheduleId`, `DELETE /:id/schedules/:scheduleId` — Matriz horaria semanal.
+- `GET /:id/busy-slots?date=YYYY-MM-DD` — Franjas horarias ocupadas en una fecha.
+- `GET /:id/reviews` — Reseñas visibles y estadísticas de calificación del comercio.
 
 ### 📅 Turnos y Reservas (`/api/v1/appointments`)
-- `GET /` & `GET /my` — Historial de turnos del usuario (o turnos del comercio si es dueño).
-- `GET /:id` — Detalle del turno.
-- `POST /` — Confirmación y persistencia de un turno (directo o mediante `holdToken`).
-- `POST /hold` — Bloqueo temporal transaccional de 10 minutos para evitar colisiones (*Hold Token*).
-- `PATCH /:id/cancel` — Cancelación de turno con motivo registrado y auditoría de usuario.
-- `PATCH /:id/status` — Cambio de estado del turno (`CONFIRMED`, `COMPLETED`, `CANCELLED`, etc.).
-- `POST /:id/reviews` — Calificación y comentario sobre un turno completado.
+- `GET /` & `GET /my` — Listado de turnos del cliente o agenda del comercio.
+- `POST /hold` — Bloqueo temporal transaccional de 10 minutos (*Hold Token*), validando días feriados/cerrados.
+- `POST /` — Confirmación de reserva (con `holdToken` o directa).
+- `PATCH /:id/cancel` — Cancelación de turno con política de 24 hs para clientes y registro inalterable de autoría.
+- `PATCH /:id/status` — Cambio de estado (`CONFIRMED`, `COMPLETED`, `CANCELLED`).
+- `POST /:id/reviews` — Creación de reseña verificada (1 a 5 estrellas) sobre un turno completado.
 
 ### 🔔 Notificaciones (`/api/v1/notifications`)
-- `GET /` — Listado de notificaciones del usuario logueado.
-- `PATCH /read-all` — Marcar todas las notificaciones como leídas.
-- `PATCH /:id/read` — Marcar una notificación individual como leída.
+- `GET /` — Listado de notificaciones in-app.
+- `GET /stream` — Canal de tiempo real mediante **Server-Sent Events (SSE)** con heartbeat cada 25s.
+- `PATCH /read-all` & `PATCH /:id/read` — Lectura masiva o individual de notificaciones.
 
-### 🏷️ Categorías (`/api/v1/categories`)
-- `GET /` — Catálogo general de categorías disponibles.
-- `GET /:slug` — Detalle y comercios asociados a una categoría específica.
+### 🏷️ Categorías (`/api/v1/categories`), 📢 Anuncios (`/api/v1/announcements`) y 🐛 Reportes (`/api/v1/reports`)
+- `GET /categories` & `GET /categories/:slug` — Catálogo dinámico de rubros comerciales activos.
+- `GET /announcements/active` — Aviso global activo para toda la plataforma.
+- `POST /reports` (y alias `/bug-reports`) — Creación de tickets de soporte (`BUG`), solicitud de nuevos rubros (`SOLICITUD_RUBRO`) o denuncias de reseñas (`MODERACION_RESENA`).
 
-### 🛡️ Administración Global (`/api/v1/admin`)
-- `GET /users` — Listado de todos los usuarios registrados en el sistema.
-- `PATCH /users/:id/role` — Modificación del rol de un usuario (`client`, `owner`, `administrator`).
-- `DELETE /users/:id` — Baja de un usuario.
-- `GET /stats` — Métricas globales (total de usuarios, turnos, comercios y reservas).
-- `GET /appointments` — Visualización global de todos los turnos registrados.
+### 🛡️ Administración Global y Cuenta Raíz (`/api/v1/admin`)
+> **Jerarquía de Seguridad:** La Cuenta Raíz (`turnosyapp@gmail.com`) goza de **inmunidad absoluta** en código: no puede ser eliminada ni degradada de rol bajo ninguna circunstancia, y es la **única cuenta autorizada** para otorgar o revocar el rol `administrator` o eliminar a otros administradores.
 
-### 🩺 Salud del Servicio (`/health`)
-- `GET /health` & `GET /api/v1/health` — Estado de conectividad de MySQL, tiempo de actividad (*uptime*) y timestamp.
-
----
-
-## ⏰ Tareas en Segundo Plano (Workers)
-
-1. **`reminderJob` (Recordatorios de Turnos)**:
-   - Se ejecuta periódicamente cada 60 segundos.
-   - Detecta reservas en estado `CONFIRMED` programadas dentro de los siguientes 65 minutos que aún no hayan recibido recordatorio.
-   - Genera una notificación in-app y, si el usuario tiene `emailNotifications = true`, despacha un correo HTML de recordatorio mediante Nodemailer.
-2. **`startKeepAlive` (Prevención de Suspensión en Render)**:
-   - Realiza un auto-ping HTTP cada 10 minutos para evitar que la instancia en la nube entre en reposo.
-3. **`ensureDatabaseSchema`**:
-   - Comprobación y compatibilidad automática de columnas al arrancar el servidor.
+- `GET /users`, `PATCH /users/:id/role`, `DELETE /users/:id` — Gestión de usuarios con protección de Cuenta Raíz.
+- `GET /businesses`, `PATCH /businesses/:id/approve`, `PATCH /businesses/:id/reject`, `PATCH /businesses/:id/suspend`, `PATCH /businesses/:id/reactivate`, `DELETE /businesses/:id` — Moderación e inspección documental de comercios.
+- `POST /businesses/:id/emergency-cancel` — Cancelación masiva de turnos por fuerza mayor / emergencia.
+- `PATCH /reviews/:id/hide`, `PATCH /reviews/:id/unhide`, `DELETE /reviews/:id` — Moderación de reseñas.
+- `GET /categories`, `POST /categories`, `PUT /categories/:id`, `PATCH /categories/:id/toggle`, `DELETE /categories/:id` — Gestor dinámico de rubros.
+- `GET /announcements`, `POST /announcements`, `PATCH /announcements/:id/toggle`, `DELETE /announcements/:id` — Gestión de comunicados globales.
+- `GET /reports` & `PATCH /reports/:id/status` — Bandeja de tickets y solicitudes de rubros.
+- `GET /audit-logs` — Bitácora de auditoría forense paginada.
+- `GET /stats`, `GET /cache/stats` & `POST /cache/clear` — Métricas ejecutivas y control de caché.
 
 ---
 
-## ⚙️ Variables de Entorno
-
-Crear un archivo `.env` en la raíz del backend con los siguientes parámetros:
+## ⚙️ Variables de Entorno (`.env`)
 
 ```env
-# Puerto del servidor
+# Servidor y Entorno
 PORT=3000
 NODE_ENV=development
+APP_TIMEZONE="America/Argentina/Buenos_Aires"
 
-# Conexión a Base de Datos MySQL
+# Base de Datos MySQL
 DATABASE_URL="mysql://root:@localhost:3306/turnos_ya"
 
-# Seguridad y Autenticación
-JWT_SECRET="tu_clave_secreta_super_segura_jwt"
-JWT_EXPIRES_IN="7d"
+# Seguridad, JWT, 2FA y Google OAuth
+JWT_SECRET="clave_secreta_jwt_aleatoria_minimo_32_caracteres"
+TWO_FACTOR_ENCRYPTION_KEY="clave_hex_o_texto_para_cifrado_aes_256_gcm"
+GOOGLE_CLIENT_ID="tu_google_client_id.apps.googleusercontent.com"
 
-# Configuración de Correo SMTP (Gmail)
+# Correos Transaccionales: Resend HTTP API (Prioritario en Cloud)
+RESEND_API_KEY="re_tu_api_key_de_resend"
+RESEND_FROM="Turnos Ya <onboarding@resend.dev>"
+
+# Fallback SMTP tradicional (Opcional / Desarrollo local)
 EMAIL_HOST=smtp.gmail.com
 EMAIL_PORT=587
 EMAIL_USER=tu_email@gmail.com
 EMAIL_PASS=tu_app_password_de_gmail
 EMAIL_FROM="Turnos Ya <tu_email@gmail.com>"
 
-# URL base para enlaces generados (validación de email / reseteo)
-APP_URL=http://localhost:5173
+# URL del Frontend Web para enlaces en correos
+FRONTEND_URL=http://localhost:5173
+
+# Semillas iniciales (Opcional - nunca subir credenciales reales al repo)
+# SEED_ADMIN_EMAIL=admin@ejemplo.com
+# SEED_ADMIN_PASSWORD=TuPasswordSegura123!
 ```
 
 ---
 
-## 🚀 Comandos de Ejecución
+## 🚀 Comandos de Ejecución y Pruebas
 
 ```bash
-# 1. Instalar dependencias
-npm install
-
-# 2. Levantar base de datos local con Docker (opcional)
-npm run db:up
-
-# 3. Aplicar esquema Prisma a MySQL
-npm run db:push
-
-# 4. Sembrar datos iniciales (usuarios, comercios, categorías)
-npm run db:seed
-
-# 5. Iniciar en modo desarrollo (recarga en caliente con tsx)
-npm run dev
-
-# 6. Ejecutar tests unitarios con Jest
-npm test
-npm run test:coverage
-
-# 7. Compilar para producción
-npm run build
-npm start
+npm install              # Instalar dependencias
+npm run db:push          # Sincronizar esquema Prisma con MySQL
+npm run db:seed          # Ejecutar semillas iniciales
+npm run dev              # Iniciar servidor en modo desarrollo con tsx
+npm test                 # Ejecutar las 8 suites de pruebas unitarias (87 tests)
+npm run build            # Generar cliente Prisma y compilar TypeScript a dist/
+npm start                # Ejecutar servidor compilado en producción
 ```
-
----
-
-## 🧪 Pruebas Unitarias
-
-El backend incluye pruebas unitarias escritas con Jest y `ts-jest` cubriendo los servicios críticos:
-- `auth.service.test.ts`: Registro, login, verificación de email y reseteo de claves.
-- `appointment.service.test.ts`: Lógica de *Hold Tokens*, prevención de colisiones y cancelaciones.
-- `business.service.test.ts`: CRUD de negocios, validación de pertenencia por dueño.

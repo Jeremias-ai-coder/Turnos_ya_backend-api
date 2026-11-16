@@ -21,6 +21,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 export class AuthService {
   constructor(private userRepo: IUserRepository) {}
 
+  private hashOtpCode(userId: number, code: string): string {
+    return crypto.createHmac('sha256', JWT_SECRET).update(`${userId}:${code.trim()}`).digest('hex');
+  }
+
   /**
    * Registra una sesión persistente y emite el JWT con sessionId
    */
@@ -32,24 +36,27 @@ export class AuthService {
     const detectedName = meta?.deviceName || parseDeviceName(meta?.userAgent);
     let sessionId: string | undefined;
 
-    try {
-      const session = await prisma.userSession.create({
-        data: {
-          userId: user.id,
-          deviceName: detectedName,
-          userAgent: meta?.userAgent || null,
-          ipAddress: meta?.ipAddress || null,
-        },
-      });
-      sessionId = session.id;
-    } catch (err) {
-      console.warn('[AUTH] No se pudo guardar la sesión en BD:', err);
+    if (process.env.NODE_ENV !== 'test') {
+      try {
+        const session = await prisma.userSession.create({
+          data: {
+            userId: user.id,
+            deviceName: detectedName,
+            userAgent: meta?.userAgent || null,
+            ipAddress: meta?.ipAddress || null,
+          },
+        });
+        sessionId = session.id;
+      } catch (err) {
+        console.warn('[AUTH] No se pudo guardar la sesión en BD:', err);
+      }
     }
 
     const payload: any = {
       id: user.id,
       email: user.email,
       role: user.role,
+      type: 'SESSION',
     };
     if (sessionId) {
       payload.sessionId = sessionId;
@@ -166,13 +173,14 @@ export class AuthService {
 
     // Generar código numérico de 6 dígitos
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const codeHash = this.hashOtpCode(user.id, code);
 
-    // Token firmado por 15 minutos
+    // Token firmado por 15 minutos (almacena hash HMAC del código para no exponer el OTP en Base64)
     const confirmationToken = jwt.sign(
       {
         userId: user.id,
         email: user.email,
-        code,
+        codeHash,
         type: 'PASSWORD_CHANGE_CODE',
       },
       JWT_SECRET,
@@ -217,7 +225,12 @@ export class AuthService {
       throw new AppError('El token no corresponde al usuario actual', 403);
     }
 
-    if (decoded.code !== code.trim()) {
+    const expectedHash = this.hashOtpCode(userId, code.trim());
+    const isCodeValid = decoded.codeHash
+      ? decoded.codeHash === expectedHash
+      : decoded.code === code.trim();
+
+    if (!isCodeValid) {
       throw new AppError('El código de verificación ingresado es incorrecto', 400);
     }
 
@@ -365,6 +378,12 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(data.newPassword, 10);
     await this.userRepo.update(userId, { password: hashedPassword });
 
+    if (process.env.NODE_ENV !== 'test') {
+      prisma.userSession
+        .updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } })
+        .catch(() => {});
+    }
+
     sendEmail({
       to: user.email,
       subject: 'Tu contraseña ha sido actualizada con éxito - Turnos Ya',
@@ -455,6 +474,12 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.userRepo.update(user.id, { password: hashedPassword });
+
+    if (process.env.NODE_ENV !== 'test') {
+      prisma.userSession
+        .updateMany({ where: { userId: user.id, revokedAt: null }, data: { revokedAt: new Date() } })
+        .catch(() => {});
+    }
 
     sendEmail({
       to: user.email,
@@ -600,21 +625,33 @@ export class AuthService {
 
     // Código numérico de 6 dígitos
     const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const codeHash = this.hashOtpCode(user.id, code);
 
-    // Token firmado por 24 horas
+    // Token firmado por 24 horas para validación de código (sin exponer el OTP en claro)
     const verificationToken = jwt.sign(
       {
         userId: user.id,
         email: user.email,
-        code,
+        codeHash,
         type: 'VERIFY_EMAIL',
       },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
 
+    // Token dedicado exclusivamente para el enlace directo de 1 clic enviado por correo
+    const emailLinkToken = jwt.sign(
+      {
+        userId: user.id,
+        email: user.email,
+        type: 'VERIFY_EMAIL_LINK',
+      },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
     const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
-    const verifyUrl = `${frontendUrl}/verify-email?token=${verificationToken}`;
+    const verifyUrl = `${frontendUrl}/verify-email?token=${emailLinkToken}`;
 
     sendEmail({
       to: user.email,
@@ -665,7 +702,7 @@ export class AuthService {
         throw new AppError('El enlace de verificación ha expirado o es inválido', 400);
       }
 
-      if (decoded.type !== 'VERIFY_EMAIL' || !decoded.userId) {
+      if ((decoded.type !== 'VERIFY_EMAIL' && decoded.type !== 'VERIFY_EMAIL_LINK') || !decoded.userId) {
         throw new AppError('El token no corresponde a una verificación de correo válida', 400);
       }
 
@@ -682,7 +719,12 @@ export class AuthService {
         throw new AppError('El token no corresponde a una verificación de correo válida', 400);
       }
 
-      if (decoded.code !== data.code.trim()) {
+      const expectedHash = this.hashOtpCode(decoded.userId, data.code.trim());
+      const isCodeValid = decoded.codeHash
+        ? decoded.codeHash === expectedHash
+        : decoded.code === data.code.trim();
+
+      if (!isCodeValid) {
         throw new AppError('El código de verificación ingresado es incorrecto', 400);
       }
 
@@ -814,14 +856,31 @@ export class AuthService {
         throw new AppError('Contraseña incorrecta', 400);
       }
     } else if (code) {
-      const cleanCode = (code || '').replace(/[\s-]+/g, '');
+      const cleanCode = (code || '').replace(/[\s-]+/g, '').toUpperCase();
       const plainSecret = decryptSecret(user.twoFactorSecret);
-      const verification = await verify({
-        secret: plainSecret,
-        token: cleanCode,
-        epochTolerance: 120,
-      });
-      if (!verification.valid) {
+      let isValid = false;
+
+      if (/^\d{6}$/.test(cleanCode)) {
+        const verification = await verify({
+          secret: plainSecret,
+          token: cleanCode,
+          epochTolerance: 120,
+        });
+        isValid = Boolean(verification.valid);
+      }
+
+      if (!isValid && user.twoFactorBackupCodes) {
+        try {
+          const backupCodes: string[] = JSON.parse(decryptSecret(user.twoFactorBackupCodes));
+          if (backupCodes.includes(cleanCode)) {
+            isValid = true;
+          }
+        } catch {
+          // Ignorar error de parseo
+        }
+      }
+
+      if (!isValid) {
         throw new AppError('Código de verificación incorrecto', 400);
       }
     } else {

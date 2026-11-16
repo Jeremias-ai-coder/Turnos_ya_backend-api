@@ -25,6 +25,10 @@ export const authGuard = (req: Request, res: Response, next: NextFunction) => {
       throw new AppError('Token inválido o expirado', 401);
     }
 
+    if (!decoded || typeof decoded.id !== 'number' || decoded.scope || (decoded.type && decoded.type !== 'SESSION')) {
+      throw new AppError('Token inválido o no autorizado para sesión', 401);
+    }
+
     (req as any).user = decoded;
 
     // Si el token tiene una sesión asociada, verificamos en BD que no haya sido revocada a distancia

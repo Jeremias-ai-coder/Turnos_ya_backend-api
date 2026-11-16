@@ -20,14 +20,16 @@ setInterval(() => {
 
 export function createRateLimiter(options: { windowMs: number; max: number; keyPrefix: string }) {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const forwarded = req.headers['x-forwarded-for'];
     const ip =
-      (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : undefined) ||
-      req.socket?.remoteAddress ||
       req.ip ||
+      req.socket?.remoteAddress ||
+      (typeof req.headers['x-forwarded-for'] === 'string'
+        ? req.headers['x-forwarded-for'].split(',')[0].trim()
+        : undefined) ||
       'unknown';
+    const userId = (req as any).user?.id ? `:u${(req as any).user.id}` : '';
 
-    const key = `${options.keyPrefix}:${ip}`;
+    const key = `${options.keyPrefix}:${ip}${userId}`;
     const now = Date.now();
     const existing = buckets.get(key);
 

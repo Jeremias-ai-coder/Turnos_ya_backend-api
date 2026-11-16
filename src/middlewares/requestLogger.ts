@@ -6,7 +6,8 @@ const logDir = path.resolve(process.cwd(), 'logs');
 const logFile = path.join(logDir, 'requests.log');
 
 export const requestLogger = (req: Request, res: Response, next: NextFunction) => {
-  const logLine = `[${new Date().toISOString()}] ${req.method} ${req.url} (ip: ${req.ip})\n`;
+  const safeUrl = req.url.replace(/([?&](?:token|code)=)[^&]+/gi, '$1[REDACTED]');
+  const logLine = `[${new Date().toISOString()}] ${req.method} ${safeUrl} (ip: ${req.ip})\n`;
   console.log(logLine.trim());
 
   try {

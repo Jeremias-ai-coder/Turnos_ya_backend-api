@@ -6,14 +6,14 @@ export class BugReportController {
 
   createBugReport = async (req: Request, res: Response) => {
     const userId = (req as any).user.id;
-    const { section, summary, steps, deviceInfo, pageUrl } = req.body;
+    const { section, summary, steps, deviceInfo, pageUrl, category, title, description, platform } = req.body;
 
     const report = await this.bugReportService.createReport({
       userId,
-      section,
-      summary,
-      steps,
-      deviceInfo,
+      section: section || category || 'GENERAL',
+      summary: summary || title || '',
+      steps: steps || description || '',
+      deviceInfo: deviceInfo || platform,
       pageUrl,
     });
 

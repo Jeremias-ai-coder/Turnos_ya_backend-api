@@ -127,10 +127,12 @@ export class AdminService {
           try {
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0];
+            const startOfToday = new Date(`${todayStr}T00:00:00.000Z`);
+            const endOfToday = new Date(`${todayStr}T23:59:59.999Z`);
 
             const [todayCount, bugCount, pendingBizCount, statusGroups, appointments, users] = await Promise.all([
               this.prisma.appointment.count({
-                where: { date: todayStr },
+                where: { date: { gte: startOfToday, lte: endOfToday } },
               }),
               this.prisma.bugReport.count({
                 where: { status: 'PENDING' },

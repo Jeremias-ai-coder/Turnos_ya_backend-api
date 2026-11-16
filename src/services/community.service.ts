@@ -61,16 +61,27 @@ export class CommunityService {
     await this.ensureTables();
     try {
       const rows: any[] = await this.prisma.$queryRawUnsafe(
-        `SELECT business_id as businessId, receive_notifications as receiveNotifications, created_at as createdAt
-         FROM business_followers
-         WHERE user_id = ?
-         ORDER BY created_at DESC`,
+        `SELECT bf.business_id as businessId, bf.receive_notifications as receiveNotifications, bf.created_at as createdAt,
+                b.name as businessName, b.category as businessCategory, b.address as businessAddress, b.phone as businessPhone
+         FROM business_followers bf
+         LEFT JOIN businesses b ON b.id = bf.business_id
+         WHERE bf.user_id = ?
+         ORDER BY bf.created_at DESC`,
         userId
       );
       return rows.map((r) => ({
         businessId: Number(r.businessId),
         receiveNotifications: Boolean(r.receiveNotifications),
-        createdAt: r.createdAt
+        createdAt: r.createdAt,
+        business: r.businessName
+          ? {
+              id: Number(r.businessId),
+              name: r.businessName,
+              category: r.businessCategory || 'General',
+              address: r.businessAddress || '',
+              phone: r.businessPhone || null,
+            }
+          : undefined,
       }));
     } catch (err) {
       console.error('[COMMUNITY] Error consultando favoritos del usuario:', err);

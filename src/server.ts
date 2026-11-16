@@ -19,6 +19,7 @@ import { startKeepAlive } from './utils/keepAlive';
 import { ensureDatabaseSchema } from './config/prisma';
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(requestLogger);
 
@@ -44,6 +45,7 @@ app.use('/api/v1/appointments', appointmentRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/bug-reports', reportRoutes);
 app.use('/api/v1/announcements', announcementRoutes);
 
 // Direct route aliases (para compatibilidad si el cliente omite /api/v1)
@@ -55,6 +57,7 @@ app.use('/appointments', appointmentRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/admin', adminRoutes);
 app.use('/reports', reportRoutes);
+app.use('/bug-reports', reportRoutes);
 app.use('/announcements', announcementRoutes);
 
 // Global error handler (RFC 7807)

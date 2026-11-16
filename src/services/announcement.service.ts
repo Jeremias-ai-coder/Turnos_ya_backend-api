@@ -102,6 +102,9 @@ export class AnnouncementService {
       : 'info';
 
     const linkUrl = data.linkUrl?.trim() || null;
+    if (linkUrl && !/^https?:\/\//i.test(linkUrl) && !linkUrl.startsWith('/')) {
+      throw new AppError('La URL del enlace debe comenzar con http://, https:// o /', 400);
+    }
     const linkText = data.linkText?.trim() || null;
     const expiresAt = data.expiresAt ? new Date(data.expiresAt) : null;
 
@@ -126,8 +129,16 @@ export class AnnouncementService {
       `UPDATE system_announcements SET is_active = NOT is_active WHERE id = ?`,
       id
     );
+    const rows: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT is_active as isActive FROM system_announcements WHERE id = ? LIMIT 1`,
+      id
+    );
     await this.cache.del('announcement:active');
-    return { success: true, id };
+    return {
+      success: true,
+      id,
+      isActive: rows.length > 0 ? Boolean(rows[0].isActive) : undefined,
+    };
   }
 
   async deleteAnnouncement(id: number) {

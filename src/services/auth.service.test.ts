@@ -374,9 +374,20 @@ describe('AuthService (Unit Tests)', () => {
       } as any);
       mockUserRepo.update.mockResolvedValue({} as any);
 
+      const emailService = require('./email.service');
+      const sendEmailSpy = jest.spyOn(emailService, 'sendEmail').mockResolvedValueOnce({ sent: true });
+
       const reqRes = await authService.requestPasswordChangeCode(15);
       const decoded: any = jwt.decode(reqRes.confirmationToken);
-      const verifyRes = await authService.verifyPasswordChangeCode(15, reqRes.confirmationToken, decoded.code);
+      expect(decoded.code).toBeUndefined();
+      expect(decoded.codeHash).toBeDefined();
+
+      const emailHtml: string = (sendEmailSpy.mock.calls[0][0] as any).html;
+      const codeMatch = emailHtml.match(/>\s*(\d{6})\s*</);
+      const otpCode = codeMatch ? codeMatch[1] : '';
+      sendEmailSpy.mockRestore();
+
+      const verifyRes = await authService.verifyPasswordChangeCode(15, reqRes.confirmationToken, otpCode);
       const submitRes = await authService.submitPasswordChange(15, {
         changeAuthToken: verifyRes.changeAuthToken,
         currentPassword: 'passwordActual123',
@@ -419,10 +430,21 @@ describe('AuthService (Unit Tests)', () => {
         emailVerified: true,
       } as any);
 
+      const emailService = require('./email.service');
+      const sendEmailSpy = jest.spyOn(emailService, 'sendEmail').mockResolvedValueOnce({ sent: true });
+
       const sendRes = await authService.sendVerificationEmail(30);
       const decoded: any = jwt.decode(sendRes.verificationToken!);
+      expect(decoded.code).toBeUndefined();
+      expect(decoded.codeHash).toBeDefined();
+
+      const emailHtml: string = (sendEmailSpy.mock.calls[0][0] as any).html;
+      const codeMatch = emailHtml.match(/>\s*(\d{6})\s*</);
+      const otpCode = codeMatch ? codeMatch[1] : '';
+      sendEmailSpy.mockRestore();
+
       const verifyRes = await authService.verifyEmail({
-        code: decoded.code,
+        code: otpCode,
         verificationToken: sendRes.verificationToken,
       });
 

@@ -73,7 +73,11 @@ export class ReviewService {
     }
 
     const created = await this.reviewRepo.create(appointmentId, data);
-    this.cache.delPattern(`business:${appointment.businessId}:*`);
+    await Promise.all([
+      this.cache.del(`business:detail:${appointment.businessId}`),
+      this.cache.delPattern('businesses:list:*'),
+      this.cache.delPattern(`business:${appointment.businessId}:*`),
+    ]);
 
     if (this.notificationService && appointment.business?.ownerId) {
       const clientName = appointment.user?.name || 'Un cliente';

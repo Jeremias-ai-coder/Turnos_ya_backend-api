@@ -129,6 +129,13 @@ export class AppointmentService {
         throw new AppError('El bloqueo temporal pertenece a otro usuario', 403);
       }
 
+      if (
+        (existingHold.businessId !== undefined && Number(existingHold.businessId) !== Number(data.businessId)) ||
+        (existingHold.serviceId !== undefined && Number(existingHold.serviceId) !== Number(data.serviceId))
+      ) {
+        throw new AppError('El bloqueo temporal no coincide con el comercio o servicio seleccionado', 400);
+      }
+
       const confirmed = await this.appointmentRepo.confirmAppointment(existingHold.id);
 
       // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
@@ -146,6 +153,13 @@ export class AppointmentService {
     }
 
     // Reserva directa sin hold
+    if (this.communityService) {
+      const closedReason = await this.communityService.getClosedReasonForDate(Number(data.businessId), data.date);
+      if (closedReason !== null) {
+        throw new AppError(`El comercio permanece cerrado en la fecha seleccionada (${closedReason})`, 400);
+      }
+    }
+
     const appointmentStart = combineDateAndTime(data.date, data.time);
     if (appointmentStart <= new Date()) {
       throw new AppError('No es posible reservar un turno en una fecha u horario que ya ha transcurrido', 400);
@@ -245,7 +259,7 @@ export class AppointmentService {
 
     const cancelled = await this.appointmentRepo.cancelAppointment(id, {
       cancelledReason: data.reason,
-      cancelledByUserId: data.cancelledByUserId || userId.toString()
+      cancelledByUserId: String(userId)
     });
 
     // Invalidar slots cacheados y estadísticas de admin

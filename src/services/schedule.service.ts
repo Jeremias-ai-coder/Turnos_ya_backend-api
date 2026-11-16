@@ -46,6 +46,8 @@ export class ScheduleService {
     // Invalidar horarios y slots del negocio
     await Promise.all([
       this.cache.del(`business:schedules:${businessId}`),
+      this.cache.del(`business:detail:${businessId}`),
+      this.cache.delPattern('businesses:list:*'),
       this.cache.delPattern(`slots:${businessId}:*`)
     ]);
 
@@ -81,6 +83,8 @@ export class ScheduleService {
     // Invalidar horarios y slots del negocio
     await Promise.all([
       this.cache.del(`business:schedules:${businessId}`),
+      this.cache.del(`business:detail:${businessId}`),
+      this.cache.delPattern('businesses:list:*'),
       this.cache.delPattern(`slots:${businessId}:*`)
     ]);
 
@@ -107,6 +111,8 @@ export class ScheduleService {
     // Invalidar horarios y slots del negocio
     await Promise.all([
       this.cache.del(`business:schedules:${businessId}`),
+      this.cache.del(`business:detail:${businessId}`),
+      this.cache.delPattern('businesses:list:*'),
       this.cache.delPattern(`slots:${businessId}:*`)
     ]);
 
