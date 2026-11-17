@@ -267,6 +267,12 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     return Array.from(busySlotsSet);
   }
 
+  // ---------------------------------------------------------------------------------------
+  // ALGORITMO DE CONCURRENCIA Y DETECCIÓN DE SOLAPAMIENTO DE INTERVALOS
+  // Evalúa si un slot solicitado colisiona con citas existentes o holds temporales activos.
+  // Modelo matemático: Intersección de intervalos semiabiertos [A_start, A_end) ∩ [B_start, B_end) ≠ ∅
+  // Condición: A_start < B_end AND A_end > B_start
+  // ---------------------------------------------------------------------------------------
   async isSlotBusy(
     businessId: number,
     date: Date,
@@ -279,7 +285,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
     const endOfDay = new Date(`${dateStr}T23:59:59.999Z`);
     const now = new Date();
 
-    // Eliminar bloqueos temporales ya expirados
+    // 1. Purga Oportunista: Elimina de la base de datos bloqueos temporales que ya caducaron (TTL vencido)
     try {
       await this.prisma.appointment.deleteMany({
         where: {
@@ -289,6 +295,7 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       });
     } catch { /* ignore */ }
 
+    // 2. Consulta de Citas Ocupadas: Turnos activos + Holds vigentes de otros usuarios
     const appointments = await this.prisma.appointment.findMany({
       where: {
         businessId,
@@ -314,24 +321,32 @@ export class PrismaAppointmentRepository implements IAppointmentRepository {
       }
     });
 
+    // 3. Conversión del horario solicitado a minutos transcurridos del día
     const requestedStartM = time.getUTCHours() * 60 + time.getUTCMinutes();
     const requestedEffectiveDuration = Math.max(30, Math.ceil((durationMinutes || 30) / 30) * 30);
     const requestedEndM = requestedStartM + requestedEffectiveDuration;
 
+    // 4. Verificación de colisiones contra cada cita del día
     for (const apt of appointments) {
       const existingStartM = apt.time.getUTCHours() * 60 + apt.time.getUTCMinutes();
       const existingDuration = Math.max(30, Math.ceil((apt.service?.durationMinutes || 30) / 30) * 30);
       const existingEndM = existingStartM + existingDuration;
 
-      // Solapamiento de intervalos semiabiertos [start, end)
+      // Solapamiento de intervalos semiabiertos:
+      // Si el inicio solicitado es menor al fin existente Y el fin solicitado es mayor al inicio existente -> COLISIÓN
       if (requestedStartM < existingEndM && requestedEndM > existingStartM) {
-        return true;
+        return true; // Horario no disponible
       }
     }
 
-    return false;
+    return false; // Horario completamente libre
   }
 
+  // ---------------------------------------------------------------------------------------
+  // LIMPIEZA DE BLOQUEOS PENDIENTES DEL USUARIO (Anti-Acaparamiento)
+  // Elimina cualquier hold en estado PENDING generado previamente por este usuario
+  // para asegurar que solo retenga un turno tentativo a la vez.
+  // ---------------------------------------------------------------------------------------
   async clearPendingHolds(userId: number): Promise<void> {
     try {
       await this.prisma.appointment.deleteMany({

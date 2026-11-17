@@ -5,8 +5,21 @@ import { AppError } from '../middlewares/errorHandler';
 import { Role, PrismaClient } from '@prisma/client';
 import { CacheService, cacheService } from './cache.service';
 
+// =========================================================================================
+// SERVICIO DE ADMINISTRACIÓN Y GOBERNANZA RBAC (AdminService)
+// Capa: Dominio / Lógica de Negocio (Clean Architecture)
+// Responsabilidades:
+//  1. Inmunidad de la Cuenta Raíz ('turnosyapp@gmail.com') contra borrado y cambio de rol.
+//  2. Jerarquía de Privilegios: Solo la Cuenta Raíz puede promover, degradar o eliminar administradores.
+//  3. Cockpit Ejecutivo: Moderación de comercios, estadísticas globales y auditoría forense.
+// =========================================================================================
+
 export const ROOT_ADMIN_EMAIL = 'turnosyapp@gmail.com';
 
+/**
+ * Función de utilidad para comprobar si una dirección de correo corresponde
+ * a la Cuenta Raíz (SuperAdmin) del ecosistema.
+ */
 export function isRootAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   return email.toLowerCase().trim() === ROOT_ADMIN_EMAIL.toLowerCase();
@@ -26,6 +39,9 @@ export class AdminService {
     return { data: users, meta: { total: users.length } };
   }
 
+  // ---------------------------------------------------------------------------------------
+  // ACTUALIZACIÓN DE ROLES CON BLINDAJE DE PRIVILEGIOS
+  // ---------------------------------------------------------------------------------------
   async updateUserRole(id: number, role: string, executorId?: number) {
     const targetUser = await this.userRepo.findById(id);
     if (!targetUser) {

@@ -26,6 +26,17 @@ export interface GetAppointmentsParams {
 import { CacheService, cacheService } from './cache.service';
 import { CommunityService } from './community.service';
 
+// =========================================================================================
+// SERVICIO DE GESTIÓN DE TURNOS (AppointmentService)
+// Capa: Dominio / Lógica de Negocio (Clean Architecture)
+// Responsabilidades:
+//  1. Orquestar el flujo de reserva transaccional en 2 fases: Hold (Bloqueo) y Confirmación.
+//  2. Validar reglas temporales (fechas futuras, días hábiles, feriados del comercio).
+//  3. Prevenir condiciones de carrera y sobreventa (Overbooking) mediante Hold Tokens (TTL 10m).
+//  4. Aplicar política estricta de cancelación (anticipación mínima de 24 horas).
+//  5. Disparar efectos colaterales desacoplados: Notificaciones In-App, SSE y Emails con Resend API.
+// =========================================================================================
+
 export class AppointmentService {
   constructor(
     private appointmentRepo: IAppointmentRepository,
@@ -36,14 +47,20 @@ export class AppointmentService {
     private communityService?: CommunityService
   ) {}
 
-
+  // ---------------------------------------------------------------------------------------
+  // FASE 1: BLOQUEO TEMPORAL DEL TURNO (HOLD TOKEN)
+  // Endpoint: POST /api/v1/appointments/hold
+  // Propósito: Bloquea un slot por 10 minutos para dar tiempo al usuario a confirmar sin que
+  //            otro cliente reserve el mismo espacio.
+  // ---------------------------------------------------------------------------------------
   async holdAppointment(userId: number, data: { businessId: number; serviceId: number; date: string; time: string }) {
-    // 1. Validar que la fecha y hora sean futuras
+    // 1.1 Validación temporal: La cita debe ser estrictamente futura
     const appointmentStart = combineDateAndTime(data.date, data.time);
     if (appointmentStart <= new Date()) {
       throw new AppError('No es posible reservar un turno en una fecha u horario que ya ha transcurrido', 400);
     }
 
+    // 1.2 Validación de estado del comercio: Solo comercios aprobados pueden operar
     if (this.businessRepo) {
       const business = await this.businessRepo.findById(Number(data.businessId));
       if (!business) {
@@ -54,6 +71,7 @@ export class AppointmentService {
       }
     }
 
+    // 1.3 Validación de días cerrados / feriados configurados por el dueño
     if (this.communityService) {
       const closedReason = await this.communityService.getClosedReasonForDate(Number(data.businessId), data.date);
       if (closedReason) {
@@ -61,9 +79,11 @@ export class AppointmentService {
       }
     }
 
+    // 1.4 Estandarización de fecha y hora a medianoche UTC para evitar Timezone Drift
     const dateUtc = new Date(data.date.includes('T') ? data.date : `${data.date}T00:00:00.000Z`);
     const timeUtc = parseTimeToUTC(data.time);
 
+    // 1.5 Obtención de duración real del servicio (discretización de tiempo)
     let durationMinutes = 30;
     if (this.serviceRepo) {
       const service = await this.serviceRepo.findById(data.serviceId);
@@ -76,18 +96,20 @@ export class AppointmentService {
       durationMinutes = service.durationMinutes;
     }
 
-    // 2. Validar que el horario no esté ocupado por otro usuario
+    // 1.6 ALGORITMO DE DETECCIÓN DE COLISIONES: Evalúa solapamiento de intervalos semiabiertos [start, end)
     const isBusy = await this.appointmentRepo.isSlotBusy(data.businessId, dateUtc, timeUtc, durationMinutes, userId);
     if (isBusy) {
       throw new AppError('El horario seleccionado ya no se encuentra disponible', 400);
     }
 
-    // 3. Limpiar bloqueos temporales previos del mismo usuario
+    // 1.7 REGLA ANTI-ACAPARAMIENTO: Limpia bloqueos temporales previos no completados del mismo usuario
     await this.appointmentRepo.clearPendingHolds(userId);
 
+    // 1.8 Generación de Token Criptográfico UUID y TTL de 10 minutos
     const holdToken = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos TTL
 
+    // 1.9 Persistencia del bloqueo pesimista en base de datos (status: 'PENDING')
     await this.appointmentRepo.createHold({
       businessId: data.businessId,
       serviceId: data.serviceId,
@@ -98,7 +120,7 @@ export class AppointmentService {
       holdExpiresAt: expiresAt
     });
 
-    // Invalidar slots cacheados de este negocio
+    // 1.10 Invalidación selectiva de la caché de disponibilidad horaria del negocio
     this.cache.delPattern(`slots:${data.businessId}:*`).catch(() => {});
 
     return {
@@ -107,6 +129,11 @@ export class AppointmentService {
     };
   }
 
+  // ---------------------------------------------------------------------------------------
+  // FASE 2: CONFIRMACIÓN DEFINITIVA DEL TURNO
+  // Endpoint: POST /api/v1/appointments
+  // Propósito: Convierte un Hold tentativo en turno confirmado (o crea uno directo si no hay hold).
+  // ---------------------------------------------------------------------------------------
   async createAppointment(userId: number, data: { businessId: number; serviceId: number; date: string; time: string; holdToken?: string }) {
     if (this.businessRepo) {
       const business = await this.businessRepo.findById(Number(data.businessId));
@@ -118,17 +145,21 @@ export class AppointmentService {
       }
     }
 
+    // CASO A: Confirmación a partir de un Hold Token previo (Flujo estándar en 2 fases)
     if (data.holdToken) {
       const existingHold = await this.appointmentRepo.findByHoldToken(data.holdToken);
 
+      // 2.A.1 Valida existencia y vigencia temporal del bloqueo
       if (!existingHold || (existingHold.holdExpiresAt && existingHold.holdExpiresAt < new Date())) {
         throw new AppError('El bloqueo temporal del turno ha expirado o es inválido', 400);
       }
 
+      // 2.A.2 SEGURIDAD ANTI-SECUESTRO: El token solo puede ser confirmado por el usuario que lo reservó
       if (existingHold.userId !== undefined && existingHold.userId !== userId) {
         throw new AppError('El bloqueo temporal pertenece a otro usuario', 403);
       }
 
+      // 2.A.3 Consistencia de datos: Coincidencia de comercio y servicio
       if (
         (existingHold.businessId !== undefined && Number(existingHold.businessId) !== Number(data.businessId)) ||
         (existingHold.serviceId !== undefined && Number(existingHold.serviceId) !== Number(data.serviceId))
@@ -136,14 +167,15 @@ export class AppointmentService {
         throw new AppError('El bloqueo temporal no coincide con el comercio o servicio seleccionado', 400);
       }
 
+      // 2.A.4 Transición de estado atómica: PENDING -> CONFIRMED (Limpia holdToken y holdExpiresAt)
       const confirmed = await this.appointmentRepo.confirmAppointment(existingHold.id);
 
-      // Enviar notificaciones a cliente y owner de forma síncrona para disponibilidad inmediata
+      // 2.A.5 Notificaciones y Despacho en Vivo (In-App, SSE para agenda del dueño y Email con Resend API)
       await this.triggerAppointmentNotifications(confirmed.id).catch(err =>
         console.error('Error enviando notificaciones de reserva:', err)
       );
 
-      // Invalidar slots cacheados y estadísticas de admin
+      // 2.A.6 Invalidación de caché de slots y métricas ejecutivas de administración
       await Promise.all([
         this.cache.delPattern(`slots:${data.businessId}:*`),
         this.cache.del('admin:stats')
@@ -151,6 +183,8 @@ export class AppointmentService {
 
       return confirmed;
     }
+
+    // CASO B: Reserva directa (ej. turnos agendados manualmente por el dueño desde su panel)
 
     // Reserva directa sin hold
     if (this.communityService) {
@@ -208,6 +242,11 @@ export class AppointmentService {
     return appointment;
   }
 
+  // ---------------------------------------------------------------------------------------
+  // CANCELACIÓN DE TURNO
+  // Endpoint: PATCH /api/v1/appointments/:id/cancel
+  // Propósito: Aplica la política de cancelación anticipada (24 horas) y gestiona permisos.
+  // ---------------------------------------------------------------------------------------
   async cancelAppointment(
     id: number,
     userId: number,
@@ -219,7 +258,7 @@ export class AppointmentService {
       throw new AppError('Turno no encontrado', 404);
     }
 
-    // 1. Validar estado actual del turno
+    // 1. Validar máquina de estados: No se pueden cancelar turnos ya finalizados o previamente cancelados
     if (appointment.status === 'CANCELLED') {
       throw new AppError('El turno ya se encuentra cancelado', 400);
     }
@@ -228,7 +267,7 @@ export class AppointmentService {
       throw new AppError('No es posible cancelar un turno que ya ha sido completado', 400);
     }
 
-    // 2. Validar autorización del solicitante
+    // 2. Control de Autorización RBAC: Solo el cliente dueño del turno, el dueño del local o un admin pueden cancelar
     const isClient = appointment.userId === userId;
     const isOwner = appointment.business?.ownerId === userId;
     const isAdmin = userRole === 'administrator';
@@ -237,7 +276,7 @@ export class AppointmentService {
       throw new AppError('No tienes permiso para cancelar este turno', 403);
     }
 
-    // 3. Regla de negocio: Validación estricta de 24 horas de anticipación
+    // 3. Regla de Negocio: Validación estricta de anticipación (24 horas)
     const hoursUntil = getHoursUntilAppointment(appointment.date, appointment.time);
 
     if (hoursUntil <= 0) {
@@ -246,8 +285,8 @@ export class AppointmentService {
 
     const minCancellationHours = Math.max(24, appointment.service?.minCancellationNoticeHours || 24);
 
-    // Los clientes deben cumplir estrictamente la anticipación mínima de 24hs.
-    // Los dueños de comercio (sobre su negocio) y administradores (sobre turnos de terceros) están exentos.
+    // EXCEPCIÓN DE NEGOCIO: Los clientes deben cumplir las 24hs obligatorias.
+    // Los dueños de comercio y administradores quedan exentos por casos de fuerza mayor o emergencias.
     const isExempt = isOwner || (isAdmin && !isClient);
 
     if (hoursUntil < minCancellationHours && !isExempt) {

@@ -1,3 +1,14 @@
+// =========================================================================================
+// SERVICIO DE DESPACHO DE EMAILS TRANSACCIONALES (EmailService)
+// Capa: Infraestructura / Integración Externa
+// Responsabilidades:
+//  1. Resolver el bloqueo de puertos SMTP (25, 465, 587) del tier gratuito de Render Cloud
+//     utilizando la API REST de Resend sobre el puerto estándar 443 (HTTPS).
+//  2. Implementar un patrón Fallback Automático: Si Resend no está configurado o falla,
+//     conmuta de forma transparente al transporte Nodemailer SMTP clásico para entornos locales.
+//  3. Despachar notificaciones críticas: Bienvenida, Códigos OTP, Confirmación y Cancelación de Turnos.
+// =========================================================================================
+
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
 

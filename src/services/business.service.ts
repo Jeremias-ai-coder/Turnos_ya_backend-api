@@ -53,12 +53,20 @@ export class BusinessService {
     );
   }
 
+  // ---------------------------------------------------------------------------------------
+  // SOLICITUD DE ALTA DE COMERCIO (POSTULACIÓN)
+  // Endpoint: POST /api/v1/businesses
+  // Propósito: Persiste el negocio en estado 'pending_approval' y orquesta los efectos
+  //            colaterales (notificaciones a admins, email al comerciante y purga de caché).
+  // ---------------------------------------------------------------------------------------
   async createBusiness(userId: number, data: CreateBusinessDTO) {
+    // 1. Persistencia mediante el repositorio: Inyecta ownerId y fuerza status: 'pending_approval'
     const business = await this.businessRepo.create(userId, data);
     const applicant = await this.userRepo.findById(userId);
 
-    // Notificar a todos los administradores del sistema
+    // 2. EFECTOS COLATERALES DESACOPLADOS (Fail-safe: un error de red no aborta la transacción)
     try {
+      // 2.1 Alerta interna a todos los administradores para que auditen las evidencias en el Cockpit
       const allUsers = (await this.userRepo.findAll()) || [];
       const admins = allUsers.filter(u => u.role === 'administrator');
 
@@ -73,7 +81,7 @@ export class BusinessService {
         }
       }
 
-      // Notificar al solicitante
+      // 2.2 Notificación interna de acuse de recibo para el usuario solicitante
       if (this.notificationService) {
         await this.notificationService.createNotification({
           userId,
@@ -83,7 +91,7 @@ export class BusinessService {
         });
       }
 
-      // Email al solicitante
+      // 2.3 Despacho de Correo Transaccional mediante Resend HTTP REST API (Puerto 443 HTTPS)
       if (applicant?.email) {
         const frontendUrl = process.env.FRONTEND_URL || 'https://turnos-ya-frontend-web-delta.vercel.app';
         sendEmail({
@@ -100,7 +108,7 @@ export class BusinessService {
       console.warn('[BUSINESS_SERVICE] Error emitiendo notificaciones de nueva solicitud:', err);
     }
 
-    // Invalidar listados y métricas
+    // 3. Invalidación de Caché LRU en Memoria: Purga listados públicos y métricas globales
     await Promise.all([
       this.cache.delPattern('businesses:list:*'),
       this.cache.del('admin:stats')
