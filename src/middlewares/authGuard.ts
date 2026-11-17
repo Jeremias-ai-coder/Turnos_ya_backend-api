@@ -3,6 +3,17 @@ import jwt from 'jsonwebtoken';
 import { AppError } from './errorHandler';
 import { prisma } from '../config/prisma';
 
+// =========================================================================================
+// MIDDLEWARE DE AUTENTICACIÓN Y CONTROL DE ACCESO (authGuard)
+// Capa: Presentación / Infraestructura HTTP
+// Responsabilidades:
+//  1. Extraer el token Bearer del encabezado Authorization o Query param.
+//  2. Verificar la firma criptográfica y expiración mediante JWT_SECRET.
+//  3. PREVENCIÓN DE TOKEN CONFUSION ATTACKS: Exigir { type: 'SESSION' } y descartar scopes temporales.
+//  4. KILL SWITCH REMOTO: Validar contra la tabla 'user_sessions' que la sesión no haya sido revocada.
+//  5. Inyectar la identidad validada en 'req.user' para los controladores.
+// =========================================================================================
+
 export const authGuard = (req: Request, res: Response, next: NextFunction) => {
   let token: string | undefined;
   const authHeader = req.headers.authorization;
@@ -25,13 +36,17 @@ export const authGuard = (req: Request, res: Response, next: NextFunction) => {
       throw new AppError('Token inválido o expirado', 401);
     }
 
+    // MITIGACIÓN DE TOKEN CONFUSION:
+    // Rechaza tokens que no posean un ID numérico, tokens con scope temporal (ej. '2fa_pending')
+    // o tokens con tipos distintos a 'SESSION' (ej. 'PASSWORD_RESET', 'VERIFY_EMAIL').
     if (!decoded || typeof decoded.id !== 'number' || decoded.scope || (decoded.type && decoded.type !== 'SESSION')) {
       throw new AppError('Token inválido o no autorizado para sesión', 401);
     }
 
     (req as any).user = decoded;
 
-    // Si el token tiene una sesión asociada, verificamos en BD que no haya sido revocada a distancia
+    // CONTROL REMOTO DE SESIONES:
+    // Si el token incluye sessionId, comprobamos en la tabla 'user_sessions' si fue revocado.
     if (decoded?.sessionId) {
       prisma.userSession
         .findUnique({

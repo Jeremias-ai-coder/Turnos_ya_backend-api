@@ -1,3 +1,14 @@
+// =========================================================================================
+// CONTENEDOR DE INVERSIÓN DE CONTROL (IoC Container / Composition Root)
+// Arquitectura: Clean Architecture + Dependency Inversion Principle (DIP - SOLID)
+// Responsabilidades:
+//  1. Composition Root: Único punto de la aplicación donde se ensamblan las dependencias.
+//  2. Desacoplamiento: Los servicios dependen de interfaces (IAppointmentRepository, etc.),
+//     NO de Prisma directamente. Si mañana se cambia a PostgreSQL o TypeORM, solo se reemplazan
+//     los repositorios concretos sin tocar una sola línea de lógica de negocio en los servicios.
+//  3. Testabilidad: Permite mockear cualquier repositorio en pruebas unitarias de Jest.
+// =========================================================================================
+
 import { prisma } from './config/prisma';
 
 // Repositorios

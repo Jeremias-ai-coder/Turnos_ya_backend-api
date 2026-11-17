@@ -18,15 +18,31 @@ import {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret';
 
+// =========================================================================================
+// SERVICIO DE AUTENTICACIÓN, CRIPTOGRAFÍA Y SESIONES (AuthService)
+// Capa: Dominio / Lógica de Negocio (Clean Architecture)
+// Responsabilidades:
+//  1. Autenticación Híbrida: Credenciales locales (Bcrypt) y Google OAuth 2.0 (Google APIs).
+//  2. Doble Factor de Autenticación (2FA TOTP): RFC 6238 con Google Authenticator.
+//  3. Criptografía de Grado Bancario: Cifrado en reposo AES-256-GCM para secretos y códigos de respaldo.
+//  4. Firma Criptográfica de OTPs: HMAC-SHA256 para códigos numéricos de restablecimiento y verificación.
+//  5. Prevención de Token Confusion: Claim estricto { type: 'SESSION' } en JWTs principales.
+//  6. Trazabilidad de Sesiones Remotas (UserSession): Kill switch para revocar dispositivos activos.
+// =========================================================================================
+
 export class AuthService {
   constructor(private userRepo: IUserRepository) {}
 
+  /**
+   * Hashea un código numérico OTP junto con el userId mediante HMAC-SHA256
+   * para no exponer códigos planos en tokens ni en bases de datos.
+   */
   private hashOtpCode(userId: number, code: string): string {
     return crypto.createHmac('sha256', JWT_SECRET).update(`${userId}:${code.trim()}`).digest('hex');
   }
 
   /**
-   * Registra una sesión persistente y emite el JWT con sessionId
+   * Registra una sesión persistente en MySQL y emite el JWT de sesión { type: 'SESSION' }
    */
   private async createSessionAndToken(
     user: any,
