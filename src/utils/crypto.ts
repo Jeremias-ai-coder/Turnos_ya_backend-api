@@ -22,7 +22,7 @@ const SECRET_KEY = crypto
  */
 export function encryptSecret(plainText: string): string {
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv(ALGORITHM, SECRET_KEY, iv);
+  const cipher = crypto.createCipheriv(ALGORITHM, SECRET_KEY as any, iv as any);
   let encrypted = cipher.update(plainText, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const authTag = cipher.getAuthTag().toString('hex');
@@ -41,8 +41,8 @@ export function decryptSecret(cipherText: string): string {
   const [ivHex, authTagHex, encryptedHex] = parts;
   const iv = Buffer.from(ivHex, 'hex');
   const authTag = Buffer.from(authTagHex, 'hex');
-  const decipher = crypto.createDecipheriv(ALGORITHM, SECRET_KEY, iv);
-  decipher.setAuthTag(authTag);
+  const decipher = crypto.createDecipheriv(ALGORITHM, SECRET_KEY as any, iv as any);
+  decipher.setAuthTag(authTag as any);
   let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
